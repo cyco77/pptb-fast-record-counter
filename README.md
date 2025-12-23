@@ -23,8 +23,9 @@
 ### Core Capabilities
 
 - 📊 **Entity List Display** - View all customizable entities in your Dataverse environment
+- 🎯 **Solution Filtering** - Filter entities by solution with dropdown selector (shows only entities in selected solution)
 - 🔢 **Fast Record Counting** - Count records for all filtered entities with a single click
-- 🔍 **Entity Filtering** - Filter entities by display name or logical name in real-time
+- 🔍 **Entity Name Filtering** - Filter entities by display name or logical name in real-time
 - 📋 **Sortable Data Grid** - Sort entities by display name, logical name, or record count
 - 🎯 **Batch Counting** - Count records for all filtered entities sequentially
 - 📢 **Visual Notifications** - Toast notifications for all operations
@@ -60,7 +61,8 @@ pptb-fast-record-counter/
 │   │   ├── dataverseService.ts    # Dataverse API queries
 │   │   └── loggerService.ts       # Centralized logging singleton
 │   ├── types/
-│   │   └── entity.ts              # Entity type definitions
+│   │   ├── entity.ts              # Entity type definitions
+│   │   └── solution.ts            # Solution type definitions
 │   ├── App.tsx                    # Main application component
 │   ├── main.tsx                   # Entry point
 │   └── index.css                  # Global styling
@@ -158,6 +160,7 @@ npm run preview
 
 #### Filter Section
 
+- **Solution Dropdown**: Select a specific solution to view only its entities, or "All" for all customizable entities
 - **Filter Entities SearchBox**: Real-time search by entity display name or logical name
 - **Count Records Button**: Execute record counting for all filtered entities
 
@@ -172,11 +175,12 @@ npm run preview
 
 #### Counting Process
 
-1. Filter entities using the search box (optional)
-2. Click "Count Records" button
-3. Watch as each entity shows "Loading..." status
-4. Record counts appear in real-time as they complete
-5. Receive a notification when all counts are finished
+1. Select a solution from the dropdown (optional - leave as "All" for all entities)
+2. Filter entities using the search box (optional)
+3. Click "Count Records" button
+4. Watch as each entity shows "Loading..." status
+5. Record counts appear in real-time as they complete
+6. Receive a notification when all counts are finished
 
 ## API Usage
 
@@ -200,9 +204,19 @@ window.toolboxAPI.onToolboxEvent((event, payload) => {
 ### Dataverse Queries
 
 ```typescript
+// Query solutions
+const solutions = await window.dataverseAPI.queryData(
+  `solutions?$select=solutionid,friendlyname,uniquename&$filter=isvisible eq true&$orderby=friendlyname asc`
+);
+
 // Query entity definitions
 const entities = await window.dataverseAPI.queryData(
   `EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName&$filter=IsCustomizable/Value eq true`
+);
+
+// Get entities in a solution via solution components
+const components = await window.dataverseAPI.queryData(
+  `solutioncomponents?$select=objectid&$filter=_solutionid_value eq ${solutionId} and componenttype eq 1`
 );
 
 // Count records for an entity
@@ -275,7 +289,8 @@ window.toolboxAPI.onToolboxEvent((event, payload) => {
   - Eliminates prop drilling for logging across components
 
 - **dataverseService**: Handles all Dataverse API queries
-  - Queries entity definitions with metadata
+  - Queries solutions and entity definitions with metadata
+  - Filters entities by solution using solution components
   - Counts records for entities using EntitySetName
   - Maps raw API responses to typed models
 
@@ -310,6 +325,16 @@ The tool uses a custom Vite configuration for PPTB compatibility:
   entitysetname: string;    // Plural API name (e.g., "accounts")
   recordCount?: number;     // Count of records (populated after counting)
   isLoading?: boolean;      // Loading state during counting
+}
+```
+
+### Solution
+
+```typescript
+{
+  solutionid: string; // Unique identifier of the solution
+  friendlyname: string; // Display name of the solution
+  uniquename: string; // Schema name of the solution
 }
 ```
 

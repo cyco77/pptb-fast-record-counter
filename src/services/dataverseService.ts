@@ -1,18 +1,65 @@
 import { Entity } from "../types/entity";
+import { Solution } from "../types/solution";
 import { logger } from "./loggerService";
 
-export const loadEntities = async (): Promise<Entity[]> => {
+export const loadSolutions = async (): Promise<Solution[]> => {
+  const url =
+    "solutions?$select=solutionid,friendlyname,uniquename&$filter=isvisible eq true&$orderby=friendlyname asc";
+
+  const allRecords = await loadAllData(url);
+
+  return allRecords.map((record: any) => ({
+    solutionid: record.solutionid,
+    friendlyname: record.friendlyname,
+    uniquename: record.uniquename,
+  }));
+};
+
+export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
   let url =
     "EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName&$filter=IsCustomizable/Value eq true";
 
   const allRecords = await loadAllData(url);
 
-  return allRecords.map((record: any) => ({
+  let entities = allRecords.map((record: any) => ({
     logicalname: record.LogicalName,
     displayname:
       record.DisplayName?.UserLocalizedLabel?.Label || record.LogicalName,
     entitysetname: record.EntitySetName,
   }));
+
+  // If a solution is selected, filter entities by solution components
+  if (solutionId) {
+    const solutionEntities = await getEntitiesInSolution(solutionId);
+    entities = entities.filter((entity) =>
+      solutionEntities.includes(entity.logicalname)
+    );
+  }
+
+  return entities;
+};
+
+const getEntitiesInSolution = async (solutionId: string): Promise<string[]> => {
+  const url = `solutioncomponents?$select=objectid&$filter=_solutionid_value eq ${solutionId} and componenttype eq 1`;
+
+  const components = await loadAllData(url);
+
+  // Get entity metadata IDs from solution components
+  const entityMetadataIds = components.map((comp: any) => comp.objectid);
+
+  if (entityMetadataIds.length === 0) {
+    return [];
+  }
+
+  // Query EntityDefinitions to get logical names for these metadata IDs
+  const entityDefsUrl = `EntityDefinitions?$select=LogicalName,MetadataId&$filter=IsCustomizable/Value eq true`;
+  const entityDefs = await loadAllData(entityDefsUrl);
+
+  const logicalNames = entityDefs
+    .filter((def: any) => entityMetadataIds.includes(def.MetadataId))
+    .map((def: any) => def.LogicalName);
+
+  return logicalNames;
 };
 
 export const countRecords = async (

@@ -1,6 +1,11 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { loadEntities, countRecords } from "../services/dataverseService";
+import {
+  loadEntities,
+  loadSolutions,
+  countRecords,
+} from "../services/dataverseService";
 import { Entity } from "../types/entity";
+import { Solution } from "../types/solution";
 import { Filter } from "./Filter";
 import { EntitiesDataGrid } from "./EntitiesDataGrid";
 import { makeStyles, Spinner } from "@fluentui/react-components";
@@ -11,9 +16,14 @@ interface IOverviewProps {
 }
 
 export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
+  const [solutions, setSolutions] = useState<Solution[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [selectedSolutionId, setSelectedSolutionId] = useState<
+    string | undefined
+  >(undefined);
   const [textFilter, setTextFilter] = useState<string>("");
   const [isLoadingEntities, setIsLoadingEntities] = useState(false);
+  const [isLoadingSolutions, setIsLoadingSolutions] = useState(false);
   const [isCountingRecords, setIsCountingRecords] = useState(false);
 
   const useStyles = makeStyles({
@@ -49,11 +59,19 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       if (!connection) {
         return;
       }
-      queryEntities();
+      await querySolutions();
+      await queryEntities();
     };
 
     initialize();
   }, [connection]);
+
+  useEffect(() => {
+    // Reload entities when solution filter changes
+    if (connection) {
+      queryEntities();
+    }
+  }, [selectedSolutionId]);
 
   const showNotification = useCallback(
     async (
@@ -75,15 +93,34 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     []
   );
 
+  const querySolutions = useCallback(async () => {
+    try {
+      setIsLoadingSolutions(true);
+      const loadedSolutions = await loadSolutions();
+      setSolutions(loadedSolutions);
+      logger.info(`Fetched ${loadedSolutions.length} solutions`);
+    } catch (error) {
+      logger.error(`Error querying solutions: ${(error as Error).message}`);
+      await showNotification(
+        "Error",
+        `Failed to load solutions: ${(error as Error).message}`,
+        "error"
+      );
+    } finally {
+      setIsLoadingSolutions(false);
+    }
+  }, [showNotification]);
+
   const queryEntities = useCallback(async () => {
     try {
       setIsLoadingEntities(true);
-      const loadedEntities = await loadEntities();
+      const loadedEntities = await loadEntities(selectedSolutionId);
       setEntities(loadedEntities);
       logger.info(`Fetched ${loadedEntities.length} entities`);
+      const solutionMsg = selectedSolutionId ? " for selected solution" : "";
       await showNotification(
         "Entities Loaded",
-        `Successfully loaded ${loadedEntities.length} entities`,
+        `Successfully loaded ${loadedEntities.length} entities${solutionMsg}`,
         "success"
       );
     } catch (error) {
@@ -96,7 +133,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     } finally {
       setIsLoadingEntities(false);
     }
-  }, [connection, showNotification]);
+  }, [selectedSolutionId, showNotification]);
 
   const filteredEntities = React.useMemo(() => {
     if (!textFilter) {
@@ -182,14 +219,28 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
   return (
     <div className={styles.overviewRoot}>
-      {isLoadingEntities ? (
+      {isLoadingEntities || isLoadingSolutions ? (
         <div className={styles.loadingContainer}>
-          <Spinner label="Loading entities..." />
+          <Spinner
+            label={
+              isLoadingSolutions
+                ? "Loading solutions..."
+                : "Loading entities..."
+            }
+          />
         </div>
       ) : (
         <>
           <div className={styles.filterSection}>
             <Filter
+              solutions={solutions}
+              selectedSolutionId={selectedSolutionId}
+              onSolutionFilterChanged={(solutionId: string | undefined) => {
+                logger.info(
+                  `Solution filter changed to: ${solutionId || "All"}`
+                );
+                setSelectedSolutionId(solutionId);
+              }}
               onTextFilterChanged={(searchText: string) => {
                 setTextFilter(searchText);
               }}
