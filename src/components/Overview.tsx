@@ -272,6 +272,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
             <Filter
               solutions={solutions}
               selectedSolutionId={selectedSolutionId}
+              textFilter={textFilter}
               onSolutionFilterChanged={(solutionId: string | undefined) => {
                 logger.info(
                   `Solution filter changed to: ${solutionId || "All"}`

@@ -18,6 +18,7 @@ import { Solution } from "../types/solution";
 export interface IFilterProps {
   solutions: Solution[];
   selectedSolutionId: string | undefined;
+  textFilter: string;
   onSolutionFilterChanged: (solutionId: string | undefined) => void;
   onTextFilterChanged: (searchText: string) => void;
   onCountRecords: () => void;
@@ -107,6 +108,7 @@ export const Filter = (props: IFilterProps): JSXElement => {
         <SearchBox
           id={searchInputId}
           placeholder="Search by display name or logical name..."
+          value={props.textFilter}
           onChange={onTextFilterChange}
           className={styles.searchInput}
         />

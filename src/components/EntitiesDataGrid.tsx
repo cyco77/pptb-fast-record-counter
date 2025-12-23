@@ -11,6 +11,7 @@ import {
   tokens,
   Dropdown,
   Option,
+  Spinner,
 } from "@fluentui/react-components";
 import type {
   DataGridProps,
@@ -131,7 +132,7 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
             selectedOptions={[item.selectedViewId || ALL_VALUE]}
             onOptionSelect={handleViewChange}
             className={styles.viewDropdown}
-            size="small"
+            size="medium"
           >
             <Option key="all" value={ALL_VALUE}>
               All
@@ -154,14 +155,26 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
         return aCount - bCount;
       },
       renderHeaderCell: () => {
-        return <div style={{ textAlign: 'right' }}>Record Count</div>;
+        return <div style={{ textAlign: "right" }}>Record Count</div>;
       },
       renderCell: (item: Entity) => {
         if (item.isLoading) {
-          return <div style={{ textAlign: 'right' }}>Loading...</div>;
+          return (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <Spinner size="tiny" />
+              <span>Progressing...</span>
+            </div>
+          );
         }
         return (
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: "right" }}>
             {item.recordCount !== undefined
               ? item.recordCount.toLocaleString()
               : "-"}
