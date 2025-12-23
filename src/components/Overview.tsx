@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import {
   loadEntities,
   loadSolutions,
+  loadAllViews,
   countRecords,
 } from "../services/dataverseService";
 import { Entity } from "../types/entity";
@@ -115,12 +116,22 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     try {
       setIsLoadingEntities(true);
       const loadedEntities = await loadEntities(selectedSolutionId);
-      setEntities(loadedEntities);
-      logger.info(`Fetched ${loadedEntities.length} entities`);
+
+      // Load all views at once
+      const viewsByEntity = await loadAllViews();
+
+      // Assign views to each entity
+      const entitiesWithViews = loadedEntities.map((entity) => {
+        const views = viewsByEntity.get(entity.logicalname) || [];
+        return { ...entity, views };
+      });
+
+      setEntities(entitiesWithViews);
+      logger.info(`Fetched ${entitiesWithViews.length} entities with views`);
       const solutionMsg = selectedSolutionId ? " for selected solution" : "";
       await showNotification(
         "Entities Loaded",
-        `Successfully loaded ${loadedEntities.length} entities${solutionMsg}`,
+        `Successfully loaded ${entitiesWithViews.length} entities${solutionMsg}`,
         "success"
       );
     } catch (error) {
@@ -171,9 +182,16 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       // Count records for each entity sequentially to avoid overwhelming the API
       for (const entity of entitiesToCount) {
         try {
+          // Get FetchXML if a view is selected
+          const selectedView = entity.views?.find(
+            (v) => v.savedqueryid === entity.selectedViewId
+          );
+          const fetchXml = selectedView?.fetchxml;
+
           const count = await countRecords(
             entity.entitysetname,
-            entity.logicalname
+            entity.logicalname,
+            fetchXml
           );
           setEntities((prev) =>
             prev.map((e) =>
@@ -182,7 +200,10 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
                 : e
             )
           );
-          logger.info(`Counted ${count} records for ${entity.logicalname}`);
+          const viewMsg = selectedView ? ` (view: ${selectedView.name})` : "";
+          logger.info(
+            `Counted ${count} records for ${entity.logicalname}${viewMsg}`
+          );
         } catch (error) {
           logger.error(
             `Error counting records for ${entity.logicalname}: ${
@@ -216,6 +237,22 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       setIsCountingRecords(false);
     }
   }, [filteredEntities, showNotification]);
+
+  const handleViewChange = useCallback(
+    (entityLogicalName: string, viewId: string | undefined) => {
+      logger.info(
+        `View changed for ${entityLogicalName} to: ${viewId || "All"}`
+      );
+      setEntities((prev) =>
+        prev.map((entity) =>
+          entity.logicalname === entityLogicalName
+            ? { ...entity, selectedViewId: viewId, recordCount: undefined }
+            : entity
+        )
+      );
+    },
+    []
+  );
 
   return (
     <div className={styles.overviewRoot}>
@@ -251,7 +288,10 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
           {entities.length > 0 && (
             <div className={styles.dataGridSection}>
-              <EntitiesDataGrid items={filteredEntities} />
+              <EntitiesDataGrid
+                items={filteredEntities}
+                onViewChange={handleViewChange}
+              />
             </div>
           )}
         </>

@@ -9,8 +9,15 @@ import {
   createTableColumn,
   makeStyles,
   tokens,
+  Dropdown,
+  Option,
 } from "@fluentui/react-components";
-import type { DataGridProps, JSXElement } from "@fluentui/react-components";
+import type {
+  DataGridProps,
+  JSXElement,
+  OptionOnSelectData,
+  SelectionEvents,
+} from "@fluentui/react-components";
 import { Entity } from "../types/entity";
 import React from "react";
 
@@ -35,10 +42,21 @@ const useStyles = makeStyles({
     textOverflow: "ellipsis",
     maxWidth: "100%",
   },
+  cellStylesRight: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "100%",
+    textAlign: "right",
+  },
+  viewDropdown: {
+    width: "100%",
+  },
 });
 
 export interface IEntitiesDataGridProps {
   items: Entity[];
+  onViewChange: (entityLogicalName: string, viewId: string | undefined) => void;
 }
 
 export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
@@ -86,6 +104,49 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
     }),
 
     createTableColumn<Entity>({
+      columnId: "views",
+      compare: () => 0, // Not sortable
+      renderHeaderCell: () => {
+        return "View";
+      },
+      renderCell: (item: Entity) => {
+        const ALL_VALUE = "All";
+        const selectedView = item.views?.find(
+          (v) => v.savedqueryid === item.selectedViewId
+        );
+        const displayValue = selectedView ? selectedView.name : ALL_VALUE;
+
+        const handleViewChange = (
+          _event: SelectionEvents,
+          data: OptionOnSelectData
+        ) => {
+          const viewId =
+            data.optionValue === ALL_VALUE ? undefined : data.optionValue;
+          props.onViewChange(item.logicalname, viewId);
+        };
+
+        return (
+          <Dropdown
+            value={displayValue}
+            selectedOptions={[item.selectedViewId || ALL_VALUE]}
+            onOptionSelect={handleViewChange}
+            className={styles.viewDropdown}
+            size="small"
+          >
+            <Option key="all" value={ALL_VALUE}>
+              All
+            </Option>
+            {item.views?.map((view) => (
+              <Option key={view.savedqueryid} value={view.savedqueryid}>
+                {view.name}
+              </Option>
+            ))}
+          </Dropdown>
+        );
+      },
+    }),
+
+    createTableColumn<Entity>({
       columnId: "recordCount",
       compare: (a, b) => {
         const aCount = a.recordCount ?? -1;
@@ -93,18 +154,18 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
         return aCount - bCount;
       },
       renderHeaderCell: () => {
-        return "Record Count";
+        return <div style={{ textAlign: 'right' }}>Record Count</div>;
       },
       renderCell: (item: Entity) => {
         if (item.isLoading) {
-          return <span>Loading...</span>;
+          return <div style={{ textAlign: 'right' }}>Loading...</div>;
         }
         return (
-          <span className={styles.cellStyles}>
+          <div style={{ textAlign: 'right' }}>
             {item.recordCount !== undefined
               ? item.recordCount.toLocaleString()
               : "-"}
-          </span>
+          </div>
         );
       },
     }),
@@ -134,6 +195,10 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
     logicalname: {
       minWidth: 300,
       defaultWidth: 300,
+    },
+    views: {
+      minWidth: 600,
+      defaultWidth: 600,
     },
   };
 
