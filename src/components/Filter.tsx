@@ -72,7 +72,7 @@ export const Filter = (props: IFilterProps): JSXElement => {
       gap: "2px",
     },
     dropdown: {
-      minWidth: "250px",
+      minWidth: "350px",
     },
     searchInput: {
       minWidth: "300px",

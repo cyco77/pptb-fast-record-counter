@@ -210,8 +210,8 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
       defaultWidth: 300,
     },
     views: {
-      minWidth: 600,
-      defaultWidth: 600,
+      minWidth: 450,
+      defaultWidth: 450,
     },
   };
 
