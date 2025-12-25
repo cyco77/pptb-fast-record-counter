@@ -15,7 +15,7 @@
   "configurations": {
     "repository": "https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter",
     "website": "https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter",
-    "iconUrl": "https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/refs/heads/main/icon/plugin-documentation_logo.png",
+    "iconUrl": "https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/refs/heads/main/icon/fast-record-counter_logo.png",
     "readmeUrl": "https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/refs/heads/main/README.md"
   },
   "license": "MIT",
