@@ -1,7 +1,7 @@
 # Fast Record Counter
 
 <p align="center">
-  <img src="icon/fast-record-counter_small.png" alt="Fast Record Counter Logo" width="314" height="150">
+  <img src="https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/HEAD/icon/fast-record-counter_small.png" alt="Fast Record Counter Logo" width="314" height="150">
 </p>
 
 <p align="center">
@@ -12,11 +12,11 @@
 
 ### Dark Theme
 
-![Fast Record Counter - Dark Theme](screenshots/main_dark.png)
+![Fast Record Counter - Dark Theme](https://github.com/cyco77/pptb-fast-record-counter/blob/HEAD/screenshots/main_dark.png)
 
 ### Light Theme
 
-![Fast Record Counter - Light Theme](screenshots/main_light.png)
+![Fast Record Counter - Light Theme](https://github.com/cyco77/pptb-fast-record-counter/blob/HEAD/screenshots/main_light.png)
 
 ## Features
 
