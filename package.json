@@ -1,6 +1,6 @@
 {
   "name": "@cyco77/pptb-fast-record-counter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "Fast Record Counter",
   "description": "A Power Platform Toolbox tool to count existing records in your environment.",
   "main": "index.html",
