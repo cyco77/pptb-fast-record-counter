@@ -29,18 +29,14 @@ export const Filter = (props: IFilterProps): JSXElement => {
   const solutionDropdownId = useId("solution-dropdown");
   const searchInputId = useId("search-input");
 
-  const ALL_SOLUTIONS_VALUE = "All";
-
   const getSelectedDisplayValue = () => {
     if (!props.selectedSolutionId) {
-      return ALL_SOLUTIONS_VALUE;
+      return "";
     }
     const selectedSolution = props.solutions.find(
       (s) => s.solutionid === props.selectedSolutionId
     );
-    return selectedSolution
-      ? selectedSolution.friendlyname
-      : ALL_SOLUTIONS_VALUE;
+    return selectedSolution ? selectedSolution.friendlyname : "";
   };
 
   const onSolutionSelect = (
@@ -48,9 +44,7 @@ export const Filter = (props: IFilterProps): JSXElement => {
     data: OptionOnSelectData
   ) => {
     const selectedValue = data.optionValue;
-    props.onSolutionFilterChanged(
-      selectedValue === ALL_SOLUTIONS_VALUE ? undefined : selectedValue
-    );
+    props.onSolutionFilterChanged(selectedValue || undefined);
   };
 
   const onTextFilterChange = (
@@ -87,15 +81,14 @@ export const Filter = (props: IFilterProps): JSXElement => {
         <label htmlFor={solutionDropdownId}>Solution</label>
         <Dropdown
           id={solutionDropdownId}
-          placeholder="All"
+          placeholder="Select a solution"
           value={getSelectedDisplayValue()}
-          selectedOptions={[props.selectedSolutionId || "All"]}
+          selectedOptions={
+            props.selectedSolutionId ? [props.selectedSolutionId] : []
+          }
           onOptionSelect={onSolutionSelect}
           className={styles.dropdown}
         >
-          <Option key="all" value="All">
-            All
-          </Option>
           {props.solutions.map((solution) => (
             <Option key={solution.solutionid} value={solution.solutionid}>
               {solution.friendlyname}

@@ -21,10 +21,15 @@ const useStyles = makeStyles({
   card: {
     maxWidth: "100%",
     width: "100%",
-    display: "block",
-    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    overflow: "hidden",
   },
   tableContainer: {
+    flex: 1,
+    overflowY: "auto",
+    overflowX: "hidden",
     marginTop: tokens.spacingVerticalM,
     paddingLeft: tokens.spacingHorizontalM,
     paddingRight: tokens.spacingHorizontalM,
@@ -32,6 +37,12 @@ const useStyles = makeStyles({
   },
   table: {
     minHeight: "0",
+  },
+  stickyHeader: {
+    position: "sticky",
+    top: 0,
+    backgroundColor: tokens.colorNeutralBackground1,
+    zIndex: 1,
   },
   emptyState: {
     padding: tokens.spacingVerticalXXL,
@@ -108,7 +119,7 @@ export const EventLog: React.FC = () => {
         <div className={styles.tableContainer}>
           <Table className={styles.table} size="small">
             <TableHeader>
-              <TableRow>
+              <TableRow className={styles.stickyHeader}>
                 <TableHeaderCell className={styles.timestampCell}>
                   Timestamp
                 </TableHeaderCell>

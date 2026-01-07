@@ -8,4 +8,5 @@ export type Entity = {
   selectedViewId?: string;
   recordCount?: number;
   isLoading?: boolean;
+  progressMessage?: string;
 };

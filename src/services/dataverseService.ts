@@ -18,16 +18,18 @@ export const loadSolutions = async (): Promise<Solution[]> => {
 
 export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
   let url =
-    "EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName&$filter=IsCustomizable/Value eq true";
+    "EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName,DataProviderId&$filter=IsCustomizable/Value eq true";
 
   const allRecords = await loadAllData(url);
 
-  let entities = allRecords.map((record: any) => ({
-    logicalname: record.LogicalName,
-    displayname:
-      record.DisplayName?.UserLocalizedLabel?.Label || record.LogicalName,
-    entitysetname: record.EntitySetName,
-  }));
+  let entities = allRecords
+    .filter((record: any) => !record.DataProviderId) // Exclude virtual entities
+    .map((record: any) => ({
+      logicalname: record.LogicalName,
+      displayname:
+        record.DisplayName?.UserLocalizedLabel?.Label || record.LogicalName,
+      entitysetname: record.EntitySetName,
+    }));
 
   // If a solution is selected, filter entities by solution components
   if (solutionId) {
@@ -122,72 +124,75 @@ export const loadViewsForEntity = async (
 export const countRecords = async (
   entitySetName: string,
   entityLogicalName: string,
-  fetchXml?: string
+  fetchXml?: string,
+  onProgress?: (message: string) => void
 ): Promise<number> => {
   try {
-    if (!entitySetName) {
-      logger.info(`No EntitySetName provided for ${entityLogicalName}`);
+    if (!entityLogicalName) {
+      logger.info(`No entity logical name provided`);
       return 0;
     }
 
-    let url: string;
-    let response: any;
-
     if (fetchXml) {
-      // Count using FetchXML from view
+      // Simple paging approach for view-based counting
       logger.info(
-        `Counting records for ${entityLogicalName} using view FetchXML`
+        `Counting records for ${entityLogicalName} using view FetchXML with simple pagination`
       );
 
-      // Use returntotalrecordcount to get the count without fetching all records
-      let countFetchXml = fetchXml;
+      let totalCount = 0;
+      let hasMorePages = true;
+      let pageNumber = 1;
 
-      // Ensure the fetch tag has returntotalrecordcount and limit to 1 record
-      if (countFetchXml.includes("returntotalrecordcount=")) {
-        countFetchXml = countFetchXml.replace(
-          /returntotalrecordcount=['"]?(true|false)['"]?/i,
-          'returntotalrecordcount="true"'
+      while (hasMorePages) {
+        // Modify FetchXML to include page number and count
+        let pagedFetchXml = fetchXml;
+
+        // Remove any existing page, count, and paging-cookie attributes
+        pagedFetchXml = pagedFetchXml.replace(/\spage=['"]?\d+['"]?/gi, "");
+        pagedFetchXml = pagedFetchXml.replace(/\scount=['"]?\d+['"]?/gi, "");
+        pagedFetchXml = pagedFetchXml.replace(
+          /\spaging-cookie=['"][^'"]*['"]/gi,
+          ""
         );
-      } else {
-        countFetchXml = countFetchXml.replace(
-          /<fetch([^>]*)>/i,
-          '<fetch$1 returntotalrecordcount="true">'
+
+        // Add page and count attributes
+        pagedFetchXml = pagedFetchXml.replace(
+          /<fetch/i,
+          `<fetch page="${pageNumber}" count="5000"`
         );
+
+        logger.info(`Fetching page ${pageNumber} for ${entityLogicalName}...`);
+
+        const queryUrl = `${entitySetName}?fetchXml=${encodeURIComponent(
+          pagedFetchXml
+        )}`;
+        const response = await window.dataverseAPI.queryData(queryUrl);
+        const pageCount = response.value?.length || 0;
+        totalCount += pageCount;
+
+        logger.info(
+          `Page ${pageNumber} returned ${pageCount} records (total: ${totalCount})`
+        );
+
+        // Continue if we got a full page
+        hasMorePages = pageCount === 5000;
+        pageNumber++;
+
+        // Safety limit to prevent infinite loops
+        if (pageNumber > 1000) {
+          logger.error(
+            `Stopping pagination at 1000 pages for ${entityLogicalName}`
+          );
+          break;
+        }
       }
 
-      // Add or update count to 1 to minimize data transfer
-      if (countFetchXml.includes("count=")) {
-        countFetchXml = countFetchXml.replace(
-          /count=['"]?\d+['"]?/i,
-          'count="1"'
-        );
-      } else {
-        countFetchXml = countFetchXml.replace(
-          /<fetch([^>]*)>/i,
-          '<fetch$1 count="1">'
-        );
-      }
-
-      logger.info(`Modified FetchXML for count`);
-      url = `${entitySetName}?fetchXml=${encodeURIComponent(countFetchXml)}`;
-      response = await window.dataverseAPI.queryData(url);
-
-      // The total count is in the @Microsoft.Dynamics.CRM.totalrecordcount annotation
-      const count =
-        (response as any)["@Microsoft.Dynamics.CRM.totalrecordcount"] ||
-        (response as any)["@odata.count"] ||
-        response.value?.length ||
-        0;
-      logger.info(`Count result for ${entityLogicalName}: ${count}`);
-      return count;
+      logger.info(`Final count result for ${entityLogicalName}: ${totalCount}`);
+      return totalCount;
     } else {
-      // Query all entity records with count
-      url = `${entitySetName}?$top=1&$count=true`;
-      logger.info(`Counting records for ${entityLogicalName} using ${url}`);
-      response = await window.dataverseAPI.queryData(url);
-      const count = (response as any)["@odata.count"] || 0;
-      logger.info(`Count result for ${entityLogicalName}: ${count}`);
-      return count;
+      // Single entity count using RetrieveTotalRecordCount
+      const counts = await countRecordsBatch([entityLogicalName]);
+      return counts[entityLogicalName] || 0;
     }
   } catch (error) {
     logger.error(
@@ -197,6 +202,51 @@ export const countRecords = async (
     );
     return 0;
   }
+};
+
+/**
+ * Count records for multiple entities in a single batch request
+ * @param entityLogicalNames Array of entity logical names to count
+ * @returns Map of entity logical name to count
+ */
+export const countRecordsBatch = async (
+  entityLogicalNames: string[]
+): Promise<Record<string, number>> => {
+  if (!entityLogicalNames || entityLogicalNames.length === 0) {
+    return {};
+  }
+
+  logger.info(
+    `Counting records for ${entityLogicalNames.length} entities using RetrieveTotalRecordCount batch`
+  );
+
+  // Build the function call URL with parameters
+  const entityNamesJson = JSON.stringify(entityLogicalNames);
+  const functionUrl = `RetrieveTotalRecordCount(EntityNames=@p)?@p=${encodeURIComponent(
+    entityNamesJson
+  )}`;
+  const response = await window.dataverseAPI.queryData(functionUrl);
+
+  // Response contains EntityRecordCountCollection with separate Keys and Values arrays
+  const entityRecordCounts = (response as any).EntityRecordCountCollection;
+
+  const results: Record<string, number> = {};
+
+  if (
+    entityRecordCounts &&
+    entityRecordCounts.Keys &&
+    entityRecordCounts.Values
+  ) {
+    // Map Keys to Values
+    for (let i = 0; i < entityRecordCounts.Keys.length; i++) {
+      const entityName = entityRecordCounts.Keys[i];
+      const count = entityRecordCounts.Values[i] || 0;
+      results[entityName] = count;
+      logger.info(`Count result for ${entityName}: ${count}`);
+    }
+  }
+
+  return results;
 };
 
 const loadAllData = async (fullUrl: string) => {

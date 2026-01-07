@@ -4,11 +4,13 @@ import {
   loadSolutions,
   loadAllViews,
   countRecords,
+  countRecordsBatch,
 } from "../services/dataverseService";
 import { Entity } from "../types/entity";
 import { Solution } from "../types/solution";
 import { Filter } from "./Filter";
 import { EntitiesDataGrid } from "./EntitiesDataGrid";
+import { EventLog } from "./EventLog";
 import { makeStyles, Spinner } from "@fluentui/react-components";
 import { logger } from "../services/loggerService";
 
@@ -26,6 +28,9 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const [isLoadingEntities, setIsLoadingEntities] = useState(false);
   const [isLoadingSolutions, setIsLoadingSolutions] = useState(false);
   const [isCountingRecords, setIsCountingRecords] = useState(false);
+  const [viewsByEntity, setViewsByEntity] = useState<Map<string, any[]>>(
+    new Map()
+  );
 
   const useStyles = makeStyles({
     overviewRoot: {
@@ -51,6 +56,11 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       overflow: "hidden",
       minHeight: 0,
     },
+    eventLogSection: {
+      flexShrink: 0,
+      height: "200px",
+      overflow: "hidden",
+    },
   });
 
   const styles = useStyles();
@@ -61,7 +71,17 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         return;
       }
       await querySolutions();
-      await queryEntities();
+      // Load all views in background (non-blocking)
+      loadAllViews()
+        .then((views) => {
+          setViewsByEntity(views);
+          logger.info(`Loaded views for ${views.size} entities in background`);
+        })
+        .catch((error) => {
+          logger.error(
+            `Error loading views in background: ${(error as Error).message}`
+          );
+        });
     };
 
     initialize();
@@ -116,11 +136,10 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     try {
       setIsLoadingEntities(true);
       const loadedEntities = await loadEntities(selectedSolutionId);
+      console.log("Loaded Entities:", loadedEntities);
+      console.log("Views By Entity:", viewsByEntity);
 
-      // Load all views at once
-      const viewsByEntity = await loadAllViews();
-
-      // Assign views to each entity
+      // Assign views to each entity from cached views
       const entitiesWithViews = loadedEntities.map((entity) => {
         const views = viewsByEntity.get(entity.logicalname) || [];
         return { ...entity, views };
@@ -179,8 +198,73 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         })
       );
 
-      // Count records for each entity sequentially to avoid overwhelming the API
-      for (const entity of entitiesToCount) {
+      // Separate entities with views from those without
+      const entitiesWithViews = entitiesToCount.filter((entity) => {
+        const selectedView = entity.views?.find(
+          (v) => v.savedqueryid === entity.selectedViewId
+        );
+        return selectedView?.fetchxml;
+      });
+
+      const entitiesWithoutViews = entitiesToCount.filter((entity) => {
+        const selectedView = entity.views?.find(
+          (v) => v.savedqueryid === entity.selectedViewId
+        );
+        return !selectedView?.fetchxml;
+      });
+
+      // Batch count entities without views using RetrieveTotalRecordCount
+      if (entitiesWithoutViews.length > 0) {
+        logger.info(
+          `Batch counting ${entitiesWithoutViews.length} entities without views`
+        );
+        try {
+          const entityNames = entitiesWithoutViews.map((e) => e.logicalname);
+          const counts = await countRecordsBatch(entityNames);
+
+          // Update all entities at once with their counts
+          setEntities((prev) =>
+            prev.map((e) => {
+              if (counts.hasOwnProperty(e.logicalname)) {
+                return {
+                  ...e,
+                  recordCount: counts[e.logicalname],
+                  isLoading: false,
+                };
+              }
+              return e;
+            })
+          );
+
+          logger.info(
+            `Batch count completed for ${entitiesWithoutViews.length} entities`
+          );
+        } catch (error) {
+          logger.error(`Error in batch counting: ${(error as Error).message}`);
+          // Mark failed entities
+          setEntities((prev) =>
+            prev.map((e) => {
+              if (
+                entitiesWithoutViews.find(
+                  (ev) => ev.logicalname === e.logicalname
+                )
+              ) {
+                return { ...e, recordCount: 0, isLoading: false };
+              }
+              return e;
+            })
+          );
+          await showNotification(
+            "Error",
+            `Failed to count records: ${(error as Error).message}`,
+            "error"
+          );
+          return;
+        }
+      }
+
+      // Count entities with views individually using FetchXML
+      for (const entity of entitiesWithViews) {
         try {
           // Get FetchXML if a view is selected
           const selectedView = entity.views?.find(
@@ -204,6 +288,12 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
           logger.info(
             `Counted ${count} records for ${entity.logicalname}${viewMsg}`
           );
+          await showNotification(
+            "Record Count Complete",
+            `Successfully counted records for ${entitiesToCount.length} entities`,
+            "success"
+          );
+          logger.info("Record count completed");
         } catch (error) {
           logger.error(
             `Error counting records for ${entity.logicalname}: ${
@@ -217,22 +307,14 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
                 : e
             )
           );
+          logger.error(`Error counting records: ${(error as Error).message}`);
+          await showNotification(
+            "Error",
+            `Failed to count records: ${(error as Error).message}`,
+            "error"
+          );
         }
       }
-
-      await showNotification(
-        "Record Count Complete",
-        `Successfully counted records for ${entitiesToCount.length} entities`,
-        "success"
-      );
-      logger.info("Record count completed");
-    } catch (error) {
-      logger.error(`Error counting records: ${(error as Error).message}`);
-      await showNotification(
-        "Error",
-        `Failed to count records: ${(error as Error).message}`,
-        "error"
-      );
     } finally {
       setIsCountingRecords(false);
     }
@@ -295,6 +377,10 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
               />
             </div>
           )}
+
+          {/* <div className={styles.eventLogSection}>
+            <EventLog />
+          </div> */}
         </>
       )}
     </div>

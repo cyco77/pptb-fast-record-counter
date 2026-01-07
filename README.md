@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A Power Platform Tool Box (PPTB) tool for counting records across all entities in your Dynamics 365/Dataverse environment. This tool provides a fast and efficient way to get record counts for all customizable entities with filtering capabilities.
+  A Power Platform Toolbox (PPTB) tool for counting records across all entities in your Dynamics 365/Dataverse environment. This tool provides a fast and efficient way to get record counts for all customizable entities with filtering capabilities.
 </p>
 
 ## Screenshots
