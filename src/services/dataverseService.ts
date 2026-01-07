@@ -124,8 +124,7 @@ export const loadViewsForEntity = async (
 export const countRecords = async (
   entitySetName: string,
   entityLogicalName: string,
-  fetchXml?: string,
-  onProgress?: (message: string) => void
+  fetchXml?: string
 ): Promise<number> => {
   try {
     if (!entityLogicalName) {

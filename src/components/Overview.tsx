@@ -10,7 +10,6 @@ import { Entity } from "../types/entity";
 import { Solution } from "../types/solution";
 import { Filter } from "./Filter";
 import { EntitiesDataGrid } from "./EntitiesDataGrid";
-import { EventLog } from "./EventLog";
 import { makeStyles, Spinner } from "@fluentui/react-components";
 import { logger } from "../services/loggerService";
 
