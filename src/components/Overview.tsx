@@ -12,6 +12,7 @@ import { Filter } from "./Filter";
 import { EntitiesDataGrid } from "./EntitiesDataGrid";
 import { makeStyles, Spinner } from "@fluentui/react-components";
 import { logger } from "../services/loggerService";
+import { isEntityBlacklisted } from "../utils/entityBlacklist";
 
 interface IOverviewProps {
   connection: ToolBoxAPI.DataverseConnection | null;
@@ -28,7 +29,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const [isLoadingSolutions, setIsLoadingSolutions] = useState(false);
   const [isCountingRecords, setIsCountingRecords] = useState(false);
   const [viewsByEntity, setViewsByEntity] = useState<Map<string, any[]>>(
-    new Map()
+    new Map(),
   );
 
   const useStyles = makeStyles({
@@ -78,7 +79,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         })
         .catch((error) => {
           logger.error(
-            `Error loading views in background: ${(error as Error).message}`
+            `Error loading views in background: ${(error as Error).message}`,
           );
         });
     };
@@ -97,7 +98,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     async (
       title: string,
       body: string,
-      type: "success" | "info" | "warning" | "error"
+      type: "success" | "info" | "warning" | "error",
     ) => {
       try {
         await window.toolboxAPI.utils.showNotification({
@@ -110,7 +111,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         console.error("Error showing notification:", error);
       }
     },
-    []
+    [],
   );
 
   const querySolutions = useCallback(async () => {
@@ -124,7 +125,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       await showNotification(
         "Error",
         `Failed to load solutions: ${(error as Error).message}`,
-        "error"
+        "error",
       );
     } finally {
       setIsLoadingSolutions(false);
@@ -135,11 +136,20 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     try {
       setIsLoadingEntities(true);
       const loadedEntities = await loadEntities(selectedSolutionId);
-      console.log("Loaded Entities:", loadedEntities);
-      console.log("Views By Entity:", viewsByEntity);
+
+      const nonBlacklistedEntities = loadedEntities.filter(
+        (entity) => !isEntityBlacklisted(entity.logicalname),
+      );
+      const blacklistedCount =
+        loadedEntities.length - nonBlacklistedEntities.length;
+      if (blacklistedCount > 0) {
+        logger.info(
+          `Ignored ${blacklistedCount} blacklisted entities while loading`,
+        );
+      }
 
       // Assign views to each entity from cached views
-      const entitiesWithViews = loadedEntities.map((entity) => {
+      const entitiesWithViews = nonBlacklistedEntities.map((entity) => {
         const views = viewsByEntity.get(entity.logicalname) || [];
         return { ...entity, views };
       });
@@ -150,14 +160,14 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       await showNotification(
         "Entities Loaded",
         `Successfully loaded ${entitiesWithViews.length} entities${solutionMsg}`,
-        "success"
+        "success",
       );
     } catch (error) {
       logger.error(`Error querying entities: ${(error as Error).message}`);
       await showNotification(
         "Error",
         `Failed to load entities: ${(error as Error).message}`,
-        "error"
+        "error",
       );
     } finally {
       setIsLoadingEntities(false);
@@ -183,7 +193,24 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       logger.info("Starting record count for all entities...");
 
       // Filter entities based on current text filter
-      const entitiesToCount = filteredEntities;
+      const entitiesToCount = filteredEntities.filter(
+        (entity) => !isEntityBlacklisted(entity.logicalname),
+      );
+      const blacklistedCount = filteredEntities.length - entitiesToCount.length;
+      if (blacklistedCount > 0) {
+        logger.info(
+          `Skipped ${blacklistedCount} blacklisted entities during counting`,
+        );
+      }
+
+      if (entitiesToCount.length === 0) {
+        await showNotification(
+          "Nothing to Count",
+          "No countable entities found after applying filters and blacklist.",
+          "info",
+        );
+        return;
+      }
 
       // Set all entities to loading state
       setEntities((prev) =>
@@ -194,20 +221,20 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
             return { ...entity, isLoading: true, recordCount: undefined };
           }
           return entity;
-        })
+        }),
       );
 
       // Separate entities with views from those without
       const entitiesWithViews = entitiesToCount.filter((entity) => {
         const selectedView = entity.views?.find(
-          (v) => v.savedqueryid === entity.selectedViewId
+          (v) => v.savedqueryid === entity.selectedViewId,
         );
         return selectedView?.fetchxml;
       });
 
       const entitiesWithoutViews = entitiesToCount.filter((entity) => {
         const selectedView = entity.views?.find(
-          (v) => v.savedqueryid === entity.selectedViewId
+          (v) => v.savedqueryid === entity.selectedViewId,
         );
         return !selectedView?.fetchxml;
       });
@@ -215,7 +242,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       // Batch count entities without views using RetrieveTotalRecordCount
       if (entitiesWithoutViews.length > 0) {
         logger.info(
-          `Batch counting ${entitiesWithoutViews.length} entities without views`
+          `Batch counting ${entitiesWithoutViews.length} entities without views`,
         );
         try {
           const entityNames = entitiesWithoutViews.map((e) => e.logicalname);
@@ -232,11 +259,11 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
                 };
               }
               return e;
-            })
+            }),
           );
 
           logger.info(
-            `Batch count completed for ${entitiesWithoutViews.length} entities`
+            `Batch count completed for ${entitiesWithoutViews.length} entities`,
           );
         } catch (error) {
           logger.error(`Error in batch counting: ${(error as Error).message}`);
@@ -245,18 +272,18 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
             prev.map((e) => {
               if (
                 entitiesWithoutViews.find(
-                  (ev) => ev.logicalname === e.logicalname
+                  (ev) => ev.logicalname === e.logicalname,
                 )
               ) {
                 return { ...e, recordCount: 0, isLoading: false };
               }
               return e;
-            })
+            }),
           );
           await showNotification(
             "Error",
             `Failed to count records: ${(error as Error).message}`,
-            "error"
+            "error",
           );
           return;
         }
@@ -267,50 +294,50 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         try {
           // Get FetchXML if a view is selected
           const selectedView = entity.views?.find(
-            (v) => v.savedqueryid === entity.selectedViewId
+            (v) => v.savedqueryid === entity.selectedViewId,
           );
           const fetchXml = selectedView?.fetchxml;
 
           const count = await countRecords(
             entity.entitysetname,
             entity.logicalname,
-            fetchXml
+            fetchXml,
           );
           setEntities((prev) =>
             prev.map((e) =>
               e.logicalname === entity.logicalname
                 ? { ...e, recordCount: count, isLoading: false }
-                : e
-            )
+                : e,
+            ),
           );
           const viewMsg = selectedView ? ` (view: ${selectedView.name})` : "";
           logger.info(
-            `Counted ${count} records for ${entity.logicalname}${viewMsg}`
+            `Counted ${count} records for ${entity.logicalname}${viewMsg}`,
           );
           await showNotification(
             "Record Count Complete",
             `Successfully counted records for ${entitiesToCount.length} entities`,
-            "success"
+            "success",
           );
           logger.info("Record count completed");
         } catch (error) {
           logger.error(
             `Error counting records for ${entity.logicalname}: ${
               (error as Error).message
-            }`
+            }`,
           );
           setEntities((prev) =>
             prev.map((e) =>
               e.logicalname === entity.logicalname
                 ? { ...e, recordCount: 0, isLoading: false }
-                : e
-            )
+                : e,
+            ),
           );
           logger.error(`Error counting records: ${(error as Error).message}`);
           await showNotification(
             "Error",
             `Failed to count records: ${(error as Error).message}`,
-            "error"
+            "error",
           );
         }
       }
@@ -322,17 +349,17 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const handleViewChange = useCallback(
     (entityLogicalName: string, viewId: string | undefined) => {
       logger.info(
-        `View changed for ${entityLogicalName} to: ${viewId || "All"}`
+        `View changed for ${entityLogicalName} to: ${viewId || "All"}`,
       );
       setEntities((prev) =>
         prev.map((entity) =>
           entity.logicalname === entityLogicalName
             ? { ...entity, selectedViewId: viewId, recordCount: undefined }
-            : entity
-        )
+            : entity,
+        ),
       );
     },
-    []
+    [],
   );
 
   return (
@@ -356,7 +383,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
               textFilter={textFilter}
               onSolutionFilterChanged={(solutionId: string | undefined) => {
                 logger.info(
-                  `Solution filter changed to: ${solutionId || "All"}`
+                  `Solution filter changed to: ${solutionId || "All"}`,
                 );
                 setSelectedSolutionId(solutionId);
               }}

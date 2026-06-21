@@ -5,7 +5,7 @@ import { logger } from "./loggerService";
 
 export const loadSolutions = async (): Promise<Solution[]> => {
   const url =
-    "solutions?$select=solutionid,friendlyname,uniquename&$filter=isvisible eq true&$orderby=friendlyname asc";
+    "solutions?$select=solutionid,friendlyname,uniquename,version&$filter=isvisible eq true&$orderby=friendlyname asc";
 
   const allRecords = await loadAllData(url);
 
@@ -13,6 +13,7 @@ export const loadSolutions = async (): Promise<Solution[]> => {
     solutionid: record.solutionid,
     friendlyname: record.friendlyname,
     uniquename: record.uniquename,
+    version: record.version,
   }));
 };
 
@@ -35,7 +36,7 @@ export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
   if (solutionId) {
     const solutionEntities = await getEntitiesInSolution(solutionId);
     entities = entities.filter((entity) =>
-      solutionEntities.includes(entity.logicalname)
+      solutionEntities.includes(entity.logicalname),
     );
   }
 
@@ -89,7 +90,7 @@ export const loadAllViews = async (): Promise<Map<string, View[]>> => {
     });
 
     logger.info(
-      `Loaded ${allRecords.length} views for ${viewsByEntity.size} entities`
+      `Loaded ${allRecords.length} views for ${viewsByEntity.size} entities`,
     );
     return viewsByEntity;
   } catch (error) {
@@ -99,7 +100,7 @@ export const loadAllViews = async (): Promise<Map<string, View[]>> => {
 };
 
 export const loadViewsForEntity = async (
-  entityLogicalName: string
+  entityLogicalName: string,
 ): Promise<View[]> => {
   try {
     const url = `savedqueries?$select=savedqueryid,name,returnedtypecode,fetchxml&$filter=returnedtypecode eq '${entityLogicalName}' and querytype eq 0&$orderby=name asc`;
@@ -115,7 +116,7 @@ export const loadViewsForEntity = async (
     logger.error(
       `Error loading views for ${entityLogicalName}: ${
         (error as Error).message
-      }`
+      }`,
     );
     return [];
   }
@@ -124,7 +125,7 @@ export const loadViewsForEntity = async (
 export const countRecords = async (
   entitySetName: string,
   entityLogicalName: string,
-  fetchXml?: string
+  fetchXml?: string,
 ): Promise<number> => {
   try {
     if (!entityLogicalName) {
@@ -135,7 +136,7 @@ export const countRecords = async (
     if (fetchXml) {
       // Simple paging approach for view-based counting
       logger.info(
-        `Counting records for ${entityLogicalName} using view FetchXML with simple pagination`
+        `Counting records for ${entityLogicalName} using view FetchXML with simple pagination`,
       );
 
       let totalCount = 0;
@@ -151,26 +152,26 @@ export const countRecords = async (
         pagedFetchXml = pagedFetchXml.replace(/\scount=['"]?\d+['"]?/gi, "");
         pagedFetchXml = pagedFetchXml.replace(
           /\spaging-cookie=['"][^'"]*['"]/gi,
-          ""
+          "",
         );
 
         // Add page and count attributes
         pagedFetchXml = pagedFetchXml.replace(
           /<fetch/i,
-          `<fetch page="${pageNumber}" count="5000"`
+          `<fetch page="${pageNumber}" count="5000"`,
         );
 
         logger.info(`Fetching page ${pageNumber} for ${entityLogicalName}...`);
 
         const queryUrl = `${entitySetName}?fetchXml=${encodeURIComponent(
-          pagedFetchXml
+          pagedFetchXml,
         )}`;
         const response = await window.dataverseAPI.queryData(queryUrl);
         const pageCount = response.value?.length || 0;
         totalCount += pageCount;
 
         logger.info(
-          `Page ${pageNumber} returned ${pageCount} records (total: ${totalCount})`
+          `Page ${pageNumber} returned ${pageCount} records (total: ${totalCount})`,
         );
 
         // Continue if we got a full page
@@ -180,7 +181,7 @@ export const countRecords = async (
         // Safety limit to prevent infinite loops
         if (pageNumber > 1000) {
           logger.error(
-            `Stopping pagination at 1000 pages for ${entityLogicalName}`
+            `Stopping pagination at 1000 pages for ${entityLogicalName}`,
           );
           break;
         }
@@ -197,7 +198,7 @@ export const countRecords = async (
     logger.error(
       `Error counting records for ${entityLogicalName}: ${
         (error as Error).message
-      }`
+      }`,
     );
     return 0;
   }
@@ -209,39 +210,82 @@ export const countRecords = async (
  * @returns Map of entity logical name to count
  */
 export const countRecordsBatch = async (
-  entityLogicalNames: string[]
+  entityLogicalNames: string[],
 ): Promise<Record<string, number>> => {
   if (!entityLogicalNames || entityLogicalNames.length === 0) {
     return {};
   }
 
   logger.info(
-    `Counting records for ${entityLogicalNames.length} entities using RetrieveTotalRecordCount batch`
+    `Counting records for ${entityLogicalNames.length} entities using RetrieveTotalRecordCount batch`,
   );
 
-  // Build the function call URL with parameters
-  const entityNamesJson = JSON.stringify(entityLogicalNames);
-  const functionUrl = `RetrieveTotalRecordCount(EntityNames=@p)?@p=${encodeURIComponent(
-    entityNamesJson
-  )}`;
-  const response = await window.dataverseAPI.queryData(functionUrl);
-
-  // Response contains EntityRecordCountCollection with separate Keys and Values arrays
-  const entityRecordCounts = (response as any).EntityRecordCountCollection;
-
+  const pendingEntities = [...new Set(entityLogicalNames)];
   const results: Record<string, number> = {};
 
-  if (
-    entityRecordCounts &&
-    entityRecordCounts.Keys &&
-    entityRecordCounts.Values
-  ) {
-    // Map Keys to Values
-    for (let i = 0; i < entityRecordCounts.Keys.length; i++) {
-      const entityName = entityRecordCounts.Keys[i];
-      const count = entityRecordCounts.Values[i] || 0;
-      results[entityName] = count;
-      logger.info(`Count result for ${entityName}: ${count}`);
+  while (pendingEntities.length > 0) {
+    try {
+      // Build the function call URL with parameters
+      const entityNamesJson = JSON.stringify(pendingEntities);
+      const functionUrl = `RetrieveTotalRecordCount(EntityNames=@p)?@p=${encodeURIComponent(
+        entityNamesJson,
+      )}`;
+      const response = await window.dataverseAPI.queryData(functionUrl);
+
+      // Response contains EntityRecordCountCollection with separate Keys and Values arrays
+      const entityRecordCounts = (response as any).EntityRecordCountCollection;
+
+      if (
+        entityRecordCounts &&
+        entityRecordCounts.Keys &&
+        entityRecordCounts.Values
+      ) {
+        // Map Keys to Values
+        for (let i = 0; i < entityRecordCounts.Keys.length; i++) {
+          const entityName = entityRecordCounts.Keys[i];
+          const count = entityRecordCounts.Values[i] || 0;
+          results[entityName] = count;
+          logger.info(`Count result for ${entityName}: ${count}`);
+        }
+      }
+
+      // Ensure all pending entities receive a value so UI loading state can finish.
+      pendingEntities.forEach((entityName) => {
+        if (!Object.prototype.hasOwnProperty.call(results, entityName)) {
+          results[entityName] = 0;
+        }
+      });
+
+      return results;
+    } catch (error) {
+      const errorMessage = (error as Error)?.message || String(error);
+      const invalidEntityMatch = errorMessage.match(
+        /Entity\s+'?([a-zA-Z0-9_]+)'?\s+is\s+not\s+valid\s+for\s+read/i,
+      );
+
+      if (!invalidEntityMatch) {
+        throw error;
+      }
+
+      const invalidEntity = invalidEntityMatch[1];
+      const indexToRemove = pendingEntities.findIndex(
+        (entityName) =>
+          entityName.toLowerCase() === invalidEntity.toLowerCase(),
+      );
+
+      if (indexToRemove === -1) {
+        throw error;
+      }
+
+      const [removedEntity] = pendingEntities.splice(indexToRemove, 1);
+      results[removedEntity] = 0;
+
+      console.error(
+        `Skipping invalid entity for record count: ${removedEntity}. Retrying without it.`,
+      );
+      logger.error(
+        `Skipping invalid entity for record count: ${removedEntity}. Retrying without it.`,
+      );
     }
   }
 

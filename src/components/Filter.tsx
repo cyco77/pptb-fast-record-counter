@@ -29,19 +29,25 @@ export const Filter = (props: IFilterProps): JSXElement => {
   const solutionDropdownId = useId("solution-dropdown");
   const searchInputId = useId("search-input");
 
+  const getSolutionDisplayLabel = (solution: Solution) => {
+    return solution.version
+      ? `${solution.friendlyname} (${solution.version})`
+      : solution.friendlyname;
+  };
+
   const getSelectedDisplayValue = () => {
     if (!props.selectedSolutionId) {
       return "";
     }
     const selectedSolution = props.solutions.find(
-      (s) => s.solutionid === props.selectedSolutionId
+      (s) => s.solutionid === props.selectedSolutionId,
     );
-    return selectedSolution ? selectedSolution.friendlyname : "";
+    return selectedSolution ? getSolutionDisplayLabel(selectedSolution) : "";
   };
 
   const onSolutionSelect = (
     _event: SelectionEvents,
-    data: OptionOnSelectData
+    data: OptionOnSelectData,
   ) => {
     const selectedValue = data.optionValue;
     props.onSolutionFilterChanged(selectedValue || undefined);
@@ -49,7 +55,7 @@ export const Filter = (props: IFilterProps): JSXElement => {
 
   const onTextFilterChange = (
     _event: SearchBoxChangeEvent,
-    data: { value: string }
+    data: { value: string },
   ) => {
     props.onTextFilterChanged(data.value);
   };
@@ -66,7 +72,17 @@ export const Filter = (props: IFilterProps): JSXElement => {
       gap: "2px",
     },
     dropdown: {
-      minWidth: "350px",
+      width: "520px",
+      minWidth: "520px",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
+    optionLabel: {
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      display: "block",
     },
     searchInput: {
       minWidth: "300px",
@@ -89,11 +105,18 @@ export const Filter = (props: IFilterProps): JSXElement => {
           onOptionSelect={onSolutionSelect}
           className={styles.dropdown}
         >
-          {props.solutions.map((solution) => (
-            <Option key={solution.solutionid} value={solution.solutionid}>
-              {solution.friendlyname}
-            </Option>
-          ))}
+          {props.solutions.map((solution) => {
+            const label = getSolutionDisplayLabel(solution);
+            return (
+              <Option
+                key={solution.solutionid}
+                value={solution.solutionid}
+                text={label}
+              >
+                <span className={styles.optionLabel}>{label}</span>
+              </Option>
+            );
+          })}
         </Dropdown>
       </div>
       <div className={styles.field}>
