@@ -12,7 +12,12 @@ import {
   Dropdown,
   Option,
 } from "@fluentui/react-components";
-import { PlayRegular } from "@fluentui/react-icons";
+import {
+  ArrowDownloadRegular,
+  CopyRegular,
+  DocumentTableRegular,
+  PlayRegular,
+} from "@fluentui/react-icons";
 import { Solution } from "../types/solution";
 
 export interface IFilterProps {
@@ -22,7 +27,11 @@ export interface IFilterProps {
   onSolutionFilterChanged: (solutionId: string | undefined) => void;
   onTextFilterChanged: (searchText: string) => void;
   onCountRecords: () => void;
+  onExportCsv: () => void;
+  onCopyMarkdown: () => void;
+  onCopyCsv: () => void;
   isCountingRecords: boolean;
+  hasEntities: boolean;
 }
 
 export const Filter = (props: IFilterProps): JSXElement => {
@@ -65,6 +74,15 @@ export const Filter = (props: IFilterProps): JSXElement => {
       display: "flex",
       gap: "12px",
       alignItems: "flex-end",
+      flexWrap: "wrap",
+    },
+    growSection: {
+      display: "flex",
+      gap: "12px",
+      alignItems: "flex-end",
+      flexWrap: "wrap",
+      flex: 1,
+      minWidth: 0,
     },
     field: {
       display: "grid",
@@ -87,56 +105,97 @@ export const Filter = (props: IFilterProps): JSXElement => {
     searchInput: {
       minWidth: "300px",
     },
+    searchSection: {
+      display: "flex",
+      gap: "12px",
+      alignItems: "flex-end",
+      flexWrap: "wrap",
+    },
+    actions: {
+      display: "flex",
+      gap: "8px",
+      alignItems: "center",
+      marginLeft: "auto",
+      justifyContent: "flex-end",
+      flexWrap: "wrap",
+    },
   });
 
   const styles = useStyles();
 
   return (
     <div className={styles.root}>
-      <div className={styles.field}>
-        <label htmlFor={solutionDropdownId}>Solution</label>
-        <Dropdown
-          id={solutionDropdownId}
-          placeholder="Select a solution"
-          value={getSelectedDisplayValue()}
-          selectedOptions={
-            props.selectedSolutionId ? [props.selectedSolutionId] : []
-          }
-          onOptionSelect={onSolutionSelect}
-          className={styles.dropdown}
+      <div className={styles.growSection}>
+        <div className={styles.field}>
+          <label htmlFor={solutionDropdownId}>Solution</label>
+          <Dropdown
+            id={solutionDropdownId}
+            placeholder="Select a solution"
+            value={getSelectedDisplayValue()}
+            selectedOptions={
+              props.selectedSolutionId ? [props.selectedSolutionId] : []
+            }
+            onOptionSelect={onSolutionSelect}
+            className={styles.dropdown}
+          >
+            {props.solutions.map((solution) => {
+              const label = getSolutionDisplayLabel(solution);
+              return (
+                <Option
+                  key={solution.solutionid}
+                  value={solution.solutionid}
+                  text={label}
+                >
+                  <span className={styles.optionLabel}>{label}</span>
+                </Option>
+              );
+            })}
+          </Dropdown>
+        </div>
+        <div className={styles.searchSection}>
+          <div className={styles.field}>
+            <label htmlFor={searchInputId}>Filter Entities</label>
+            <SearchBox
+              id={searchInputId}
+              placeholder="Search by display name or logical name..."
+              value={props.textFilter}
+              onChange={onTextFilterChange}
+              className={styles.searchInput}
+            />
+          </div>
+          <Button
+            appearance="primary"
+            icon={<PlayRegular />}
+            onClick={props.onCountRecords}
+            disabled={props.isCountingRecords}
+          >
+            {props.isCountingRecords ? "Counting..." : "Count Records"}
+          </Button>
+        </div>
+      </div>
+      <div className={styles.actions}>
+        <Button
+          icon={<CopyRegular />}
+          onClick={props.onCopyCsv}
+          disabled={!props.hasEntities}
         >
-          {props.solutions.map((solution) => {
-            const label = getSolutionDisplayLabel(solution);
-            return (
-              <Option
-                key={solution.solutionid}
-                value={solution.solutionid}
-                text={label}
-              >
-                <span className={styles.optionLabel}>{label}</span>
-              </Option>
-            );
-          })}
-        </Dropdown>
+          Copy CSV
+        </Button>
+        <Button
+          icon={<DocumentTableRegular />}
+          onClick={props.onCopyMarkdown}
+          disabled={!props.hasEntities}
+        >
+          Copy Markdown
+        </Button>
+        <Button
+          icon={<ArrowDownloadRegular />}
+          onClick={props.onExportCsv}
+          disabled={!props.hasEntities}
+        >
+          Export CSV
+        </Button>
       </div>
-      <div className={styles.field}>
-        <label htmlFor={searchInputId}>Filter Entities</label>
-        <SearchBox
-          id={searchInputId}
-          placeholder="Search by display name or logical name..."
-          value={props.textFilter}
-          onChange={onTextFilterChange}
-          className={styles.searchInput}
-        />
-      </div>
-      <Button
-        appearance="primary"
-        icon={<PlayRegular />}
-        onClick={props.onCountRecords}
-        disabled={props.isCountingRecords}
-      >
-        {props.isCountingRecords ? "Counting..." : "Count Records"}
-      </Button>
     </div>
   );
 };

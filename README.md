@@ -1,12 +1,8 @@
 # Fast Record Counter
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/HEAD/icon/fast-record-counter_small.png" alt="Fast Record Counter Logo" width="314" height="150">
-</p>
+![Fast Record Counter - Dark Theme](https://raw.githubusercontent.com/cyco77/pptb-fast-record-counter/HEAD/icon/fast-record-counter_small.png)
 
-<p align="center">
-  A Power Platform Toolbox (PPTB) tool for counting records across all entities in your Dynamics 365/Dataverse environment. This tool provides a fast and efficient way to get record counts for all customizable entities with filtering capabilities.
-</p>
+A Power Platform Toolbox (PPTB) tool for counting records across all entities in your Dynamics 365/Dataverse environment. This tool provides a fast and efficient way to get record counts for all customizable entities with filtering capabilities.
 
 ## Screenshots
 

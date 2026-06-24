@@ -20,7 +20,6 @@ import type {
   SelectionEvents,
 } from "@fluentui/react-components";
 import { Entity } from "../types/entity";
-import React from "react";
 
 const useStyles = makeStyles({
   scrollWrapper: {
@@ -58,16 +57,12 @@ const useStyles = makeStyles({
 export interface IEntitiesDataGridProps {
   items: Entity[];
   onViewChange: (entityLogicalName: string, viewId: string | undefined) => void;
+  sortState: Parameters<NonNullable<DataGridProps["onSortChange"]>>[1];
+  onSortChange: NonNullable<DataGridProps["onSortChange"]>;
 }
 
 export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
   const styles = useStyles();
-  const [sortState, setSortState] = React.useState<
-    Parameters<NonNullable<DataGridProps["onSortChange"]>>[1]
-  >({
-    sortColumn: "displayname",
-    sortDirection: "ascending",
-  });
 
   const columns: TableColumnDefinition<Entity>[] = [
     createTableColumn<Entity>({
@@ -184,22 +179,6 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
     }),
   ];
 
-  const sortedItems = React.useMemo(() => {
-    const sorted = [...props.items].sort((a, b) => {
-      const column = columns.find(
-        (col) => col.columnId === sortState.sortColumn
-      );
-      if (!column || !column.compare) {
-        return 0;
-      }
-      const compareResult = column.compare(a, b);
-      return sortState.sortDirection === "ascending"
-        ? compareResult
-        : -compareResult;
-    });
-    return sorted;
-  }, [props.items, sortState]);
-
   const columnSizingOptions = {
     displayname: {
       minWidth: 300,
@@ -218,11 +197,11 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
   return (
     <div className={styles.scrollWrapper}>
       <DataGrid
-        items={sortedItems}
+        items={props.items}
         columns={columns}
         sortable
-        sortState={sortState}
-        onSortChange={(_e, nextSortState) => setSortState(nextSortState)}
+        sortState={props.sortState}
+        onSortChange={props.onSortChange}
         getRowId={(item) => item.logicalname}
         className={styles.gridContainer}
         resizableColumns

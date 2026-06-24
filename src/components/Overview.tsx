@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import type { DataGridProps } from "@fluentui/react-components";
 import {
   loadEntities,
   loadSolutions,
@@ -28,6 +29,12 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const [isLoadingEntities, setIsLoadingEntities] = useState(false);
   const [isLoadingSolutions, setIsLoadingSolutions] = useState(false);
   const [isCountingRecords, setIsCountingRecords] = useState(false);
+  const [sortState, setSortState] = useState<
+    Parameters<NonNullable<DataGridProps["onSortChange"]>>[1]
+  >({
+    sortColumn: "displayname",
+    sortDirection: "ascending",
+  });
   const [viewsByEntity, setViewsByEntity] = useState<Map<string, any[]>>(
     new Map(),
   );
@@ -186,6 +193,156 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       );
     });
   }, [entities, textFilter]);
+
+  const sortedEntities = React.useMemo(() => {
+    const sorted = [...filteredEntities].sort((a, b) => {
+      let compareResult = 0;
+
+      switch (sortState.sortColumn) {
+        case "logicalname":
+          compareResult = a.logicalname.localeCompare(b.logicalname);
+          break;
+        case "recordCount": {
+          const aCount = a.recordCount ?? -1;
+          const bCount = b.recordCount ?? -1;
+          compareResult = aCount - bCount;
+          break;
+        }
+        case "views":
+          compareResult = 0;
+          break;
+        case "displayname":
+        default:
+          compareResult = a.displayname.localeCompare(b.displayname);
+          break;
+      }
+
+      return sortState.sortDirection === "descending"
+        ? -compareResult
+        : compareResult;
+    });
+
+    return sorted;
+  }, [filteredEntities, sortState]);
+
+  const getSelectedViewName = useCallback((entity: Entity) => {
+    const selectedView = entity.views?.find(
+      (view) => view.savedqueryid === entity.selectedViewId,
+    );
+    return selectedView?.name || "All";
+  }, []);
+
+  const getRecordCountDisplay = useCallback((entity: Entity) => {
+    if (entity.isLoading) {
+      return "Progressing...";
+    }
+    return entity.recordCount !== undefined ? entity.recordCount.toString() : "-";
+  }, []);
+
+  const getExportRows = useCallback(() => {
+    return sortedEntities.map((entity) => ({
+      displayName: entity.displayname,
+      logicalName: entity.logicalname,
+      view: getSelectedViewName(entity),
+      recordCount: getRecordCountDisplay(entity),
+    }));
+  }, [getRecordCountDisplay, getSelectedViewName, sortedEntities]);
+
+  const escapeCsvValue = useCallback((value: string) => {
+    if (/[",\n]/.test(value)) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }, []);
+
+  const buildCsvContent = useCallback(() => {
+    const rows = getExportRows();
+    const header = ["Display Name", "Logical Name", "View", "Record Count"];
+    const csvRows = rows.map((row) =>
+      [row.displayName, row.logicalName, row.view, row.recordCount]
+        .map((value) => escapeCsvValue(value))
+        .join(","),
+    );
+    return [header.join(","), ...csvRows].join("\n");
+  }, [escapeCsvValue, getExportRows]);
+
+  const escapeMarkdownValue = useCallback((value: string) => {
+    return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  }, []);
+
+  const buildMarkdownContent = useCallback(() => {
+    const rows = getExportRows();
+    const lines = [
+      "| Display Name | Logical Name | View | Record Count |",
+      "| --- | --- | --- | ---: |",
+      ...rows.map(
+        (row) =>
+          `| ${escapeMarkdownValue(row.displayName)} | ${escapeMarkdownValue(row.logicalName)} | ${escapeMarkdownValue(row.view)} | ${escapeMarkdownValue(row.recordCount)} |`,
+      ),
+    ];
+    return lines.join("\n");
+  }, [escapeMarkdownValue, getExportRows]);
+
+  const copyToClipboard = useCallback(
+    async (content: string, format: "Markdown" | "CSV") => {
+      try {
+        await navigator.clipboard.writeText(content);
+        logger.info(`${format} copied to clipboard`);
+        await showNotification(
+          `${format} Copied`,
+          `Copied ${sortedEntities.length} rows to the clipboard.`,
+          "success",
+        );
+      } catch (error) {
+        logger.error(`Error copying ${format.toLowerCase()}: ${(error as Error).message}`);
+        await showNotification(
+          "Error",
+          `Failed to copy ${format.toLowerCase()}: ${(error as Error).message}`,
+          "error",
+        );
+      }
+    },
+    [showNotification, sortedEntities.length],
+  );
+
+  const handleExportCsv = useCallback(async () => {
+    try {
+      const csvContent = buildCsvContent();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filePath = await window.toolboxAPI.fileSystem.saveFile(
+        `fast-record-counter-${timestamp}.csv`,
+        csvContent,
+        [{ name: "CSV", extensions: ["csv"] }],
+      );
+
+      if (!filePath) {
+        logger.info("CSV export canceled by user");
+        return;
+      }
+
+      logger.info(`Exported ${sortedEntities.length} rows to CSV: ${filePath}`);
+      await showNotification(
+        "CSV Exported",
+        `Exported ${sortedEntities.length} rows to a CSV file.`,
+        "success",
+      );
+    } catch (error) {
+      logger.error(`Error exporting CSV: ${(error as Error).message}`);
+      await showNotification(
+        "Error",
+        `Failed to export CSV: ${(error as Error).message}`,
+        "error",
+      );
+    }
+  }, [buildCsvContent, showNotification, sortedEntities.length]);
+
+  const handleCopyMarkdown = useCallback(async () => {
+    await copyToClipboard(buildMarkdownContent(), "Markdown");
+  }, [buildMarkdownContent, copyToClipboard]);
+
+  const handleCopyCsv = useCallback(async () => {
+    await copyToClipboard(buildCsvContent(), "CSV");
+  }, [buildCsvContent, copyToClipboard]);
 
   const handleCountRecords = useCallback(async () => {
     try {
@@ -391,15 +548,23 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
                 setTextFilter(searchText);
               }}
               onCountRecords={handleCountRecords}
+              onExportCsv={handleExportCsv}
+              onCopyMarkdown={handleCopyMarkdown}
+              onCopyCsv={handleCopyCsv}
               isCountingRecords={isCountingRecords}
+              hasEntities={filteredEntities.length > 0}
             />
           </div>
 
           {entities.length > 0 && (
             <div className={styles.dataGridSection}>
               <EntitiesDataGrid
-                items={filteredEntities}
+                items={sortedEntities}
                 onViewChange={handleViewChange}
+                sortState={sortState}
+                onSortChange={(_event, nextSortState) =>
+                  setSortState(nextSortState)
+                }
               />
             </div>
           )}
