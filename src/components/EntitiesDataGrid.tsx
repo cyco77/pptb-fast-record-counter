@@ -108,13 +108,13 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
       renderCell: (item: Entity) => {
         const ALL_VALUE = "All";
         const selectedView = item.views?.find(
-          (v) => v.savedqueryid === item.selectedViewId
+          (v) => v.savedqueryid === item.selectedViewId,
         );
         const displayValue = selectedView ? selectedView.name : ALL_VALUE;
 
         const handleViewChange = (
           _event: SelectionEvents,
-          data: OptionOnSelectData
+          data: OptionOnSelectData,
         ) => {
           const viewId =
             data.optionValue === ALL_VALUE ? undefined : data.optionValue;

@@ -236,7 +236,9 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     if (entity.isLoading) {
       return "Progressing...";
     }
-    return entity.recordCount !== undefined ? entity.recordCount.toString() : "-";
+    return entity.recordCount !== undefined
+      ? entity.recordCount.toString()
+      : "-";
   }, []);
 
   const getExportRows = useCallback(() => {
@@ -294,7 +296,9 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
           "success",
         );
       } catch (error) {
-        logger.error(`Error copying ${format.toLowerCase()}: ${(error as Error).message}`);
+        logger.error(
+          `Error copying ${format.toLowerCase()}: ${(error as Error).message}`,
+        );
         await showNotification(
           "Error",
           `Failed to copy ${format.toLowerCase()}: ${(error as Error).message}`,
