@@ -1,6 +1,7 @@
 {
   "name": "@cyco77/pptb-fast-record-counter",
-  "version": "0.9.1",
+  "version": "0.9.6",
+  "type": "module",
   "displayName": "Fast Record Counter",
   "description": "A Power Platform Toolbox tool to count existing records in your environment.",
   "main": "index.html",
@@ -38,7 +39,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && vite build --config vite.headless.config.ts",
     "dev": "vite",
     "watch": "vite build --watch",
     "preview": "vite preview",
@@ -54,15 +55,17 @@
     "@fluentui/react-components": "^9.72.7"
   },
   "devDependencies": {
-    "@pptb/types": "^1.2.3",
+    "@pptb/types": "^1.2.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^6.0.2",
-    "typescript": "^5.6.3",
-    "vite": "^8.0.16"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
   },
   "files": [
     "dist",
-    "npm-shrinkwrap.json"
+    "npm-shrinkwrap.json",
+    "pptb.config.json",
+    "mcp-features.md"
   ]
 }

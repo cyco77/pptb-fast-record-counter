@@ -5,16 +5,185 @@ import { logger } from "./loggerService";
 
 export const loadSolutions = async (): Promise<Solution[]> => {
   const url =
-    "solutions?$select=solutionid,friendlyname,uniquename,version&$filter=isvisible eq true&$orderby=friendlyname asc";
+    "solutions?$select=solutionid,friendlyname,uniquename,version,_publisherid_value&$filter=isvisible eq true&$orderby=friendlyname asc";
 
   const allRecords = await loadAllData(url);
+  const publisherIds = [
+    ...new Set(
+      allRecords
+        .map((record: any) => record._publisherid_value)
+        .filter((publisherId: unknown): publisherId is string =>
+          typeof publisherId === "string",
+        ),
+    ),
+  ];
+  const publishers = new Map<string, { name: string; uniqueName: string }>();
+
+  if (publisherIds.length > 0) {
+    const publisherRecords = await loadAllData(
+      "publishers?$select=publisherid,friendlyname,uniquename",
+    );
+    publisherRecords.forEach((publisher: any) => {
+      if (publisher.publisherid) {
+        publishers.set(publisher.publisherid, {
+          name: publisher.friendlyname,
+          uniqueName: publisher.uniquename,
+        });
+      }
+    });
+  }
 
   return allRecords.map((record: any) => ({
     solutionid: record.solutionid,
     friendlyname: record.friendlyname,
     uniquename: record.uniquename,
     version: record.version,
+    publisherName: publishers.get(record._publisherid_value)?.name,
+    publisherUniqueName: publishers.get(record._publisherid_value)?.uniqueName,
   }));
+};
+
+export type SolutionSelector = {
+  solutionId?: string;
+  solutionName?: string;
+  solutionUniqueName?: string;
+  publisher?: string;
+};
+
+export type SolutionResolution =
+  | { status: "resolved"; solution: Solution }
+  | {
+      status: "selection-required";
+      solutions: Solution[];
+      suggestions: Array<{ solution: Solution; score: number }>;
+    };
+
+export const resolveSolution = (
+  solutions: Solution[],
+  selector: SolutionSelector,
+): SolutionResolution => {
+  const normalizeName = (value: string | undefined): string =>
+    (value ?? "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  const matchesName = (value: string | undefined, expected: string) =>
+    normalizeName(value) === normalizeName(expected);
+  const similarity = (left: string, right: string): number => {
+    if (left === right) return 1;
+    if (!left || !right) return 0;
+    const distances = Array.from({ length: right.length + 1 }, (_, i) => i);
+    for (let row = 1; row <= left.length; row++) {
+      let diagonal = distances[0];
+      distances[0] = row;
+      for (let column = 1; column <= right.length; column++) {
+        const above = distances[column];
+        distances[column] = Math.min(
+          distances[column] + 1,
+          distances[column - 1] + 1,
+          diagonal + (left[row - 1] === right[column - 1] ? 0 : 1),
+        );
+        diagonal = above;
+      }
+    }
+    return 1 - distances[right.length] / Math.max(left.length, right.length);
+  };
+  const nameSimilarity = (solution: Solution, expected: string) =>
+    Math.max(
+      similarity(normalizeName(solution.friendlyname), normalizeName(expected)),
+      similarity(normalizeName(solution.uniquename), normalizeName(expected)),
+    );
+
+  const solutionId = selector.solutionId?.trim().toLowerCase();
+  const solutionName = selector.solutionName?.trim().toLowerCase();
+  const solutionUniqueName = selector.solutionUniqueName?.trim().toLowerCase();
+  const publisher = selector.publisher?.trim().toLowerCase();
+
+  if (!solutionId && !solutionName && !solutionUniqueName && !publisher) {
+    return { status: "selection-required", solutions: [], suggestions: [] };
+  }
+
+  const matches = solutions.filter((solution) => {
+    if (solutionId && solution.solutionid.toLowerCase() !== solutionId) {
+      return false;
+    }
+    if (
+      solutionName &&
+      !matchesName(solution.friendlyname, solutionName) &&
+      !matchesName(solution.uniquename, solutionName)
+    ) {
+      return false;
+    }
+    if (
+      solutionUniqueName &&
+      !matchesName(solution.uniquename, solutionUniqueName)
+    ) {
+      return false;
+    }
+    if (
+      publisher &&
+      solution.publisherName?.toLowerCase() !== publisher &&
+      solution.publisherUniqueName?.toLowerCase() !== publisher
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  if (matches.length === 0) {
+    const scored = solutions
+      .map((solution) => {
+        const scores: number[] = [];
+        if (solutionName) scores.push(nameSimilarity(solution, solutionName));
+        if (solutionUniqueName) {
+          scores.push(
+            similarity(
+              normalizeName(solution.uniquename),
+              normalizeName(solutionUniqueName),
+            ),
+          );
+        }
+        if (publisher) {
+          scores.push(
+            Math.max(
+              similarity(normalizeName(solution.publisherName), normalizeName(publisher)),
+              similarity(
+                normalizeName(solution.publisherUniqueName),
+                normalizeName(publisher),
+              ),
+            ),
+          );
+        }
+        return {
+          solution,
+          score: scores.length
+            ? scores.reduce((total, score) => total + score, 0) / scores.length
+            : 0,
+        };
+      })
+      .filter((match) => match.score >= 0.65)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 5);
+    const top = scored[0];
+    const next = scored[1];
+    if (top && top.score >= 0.9 && (!next || top.score - next.score >= 0.08)) {
+      return { status: "resolved", solution: top.solution };
+    }
+    return {
+      status: "selection-required",
+      solutions: scored.map((match) => match.solution),
+      suggestions: scored,
+    };
+  }
+
+  return matches.length === 1
+    ? { status: "resolved", solution: matches[0] }
+    : {
+        status: "selection-required",
+        solutions: matches,
+        suggestions: matches.map((solution) => ({ solution, score: 1 })),
+      };
 };
 
 export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
@@ -36,14 +205,19 @@ export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
   if (solutionId) {
     const solutionEntities = await getEntitiesInSolution(solutionId);
     entities = entities.filter((entity) =>
-      solutionEntities.includes(entity.logicalname),
+      solutionEntities.has(entity.logicalname.toLowerCase()),
     );
   }
 
   return entities;
 };
 
-const getEntitiesInSolution = async (solutionId: string): Promise<string[]> => {
+const normalizeGuid = (value: unknown): string =>
+  typeof value === "string"
+    ? value.replace(/[{}]/g, "").trim().toLowerCase()
+    : "";
+
+const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> => {
   const url = `solutioncomponents?$select=objectid&$filter=_solutionid_value eq ${solutionId} and componenttype eq 1`;
 
   const components = await loadAllData(url);
@@ -52,18 +226,31 @@ const getEntitiesInSolution = async (solutionId: string): Promise<string[]> => {
   const entityMetadataIds = components.map((comp: any) => comp.objectid);
 
   if (entityMetadataIds.length === 0) {
-    return [];
+    throw new Error(
+      `Solution ${solutionId} does not contain any entity components.`,
+    );
   }
+
+  const normalizedMetadataIds = new Set(
+    entityMetadataIds.map(normalizeGuid).filter(Boolean),
+  );
 
   // Query EntityDefinitions to get logical names for these metadata IDs
   const entityDefsUrl = `EntityDefinitions?$select=LogicalName,MetadataId&$filter=IsCustomizable/Value eq true`;
   const entityDefs = await loadAllData(entityDefsUrl);
 
   const logicalNames = entityDefs
-    .filter((def: any) => entityMetadataIds.includes(def.MetadataId))
-    .map((def: any) => def.LogicalName);
+    .filter((def: any) => normalizedMetadataIds.has(normalizeGuid(def.MetadataId)))
+    .map((def: any) => String(def.LogicalName).toLowerCase())
+    .filter(Boolean);
 
-  return logicalNames;
+  if (logicalNames.length === 0) {
+    throw new Error(
+      `Solution ${solutionId} contains entity components, but none could be resolved to entity metadata.`,
+    );
+  }
+
+  return new Set(logicalNames);
 };
 
 export const loadAllViews = async (): Promise<Map<string, View[]>> => {
@@ -166,7 +353,7 @@ export const countRecords = async (
         const queryUrl = `${entitySetName}?fetchXml=${encodeURIComponent(
           pagedFetchXml,
         )}`;
-        const response = await window.dataverseAPI.queryData(queryUrl);
+        const response = await globalThis.dataverseAPI.queryData(queryUrl);
         const pageCount = response.value?.length || 0;
         totalCount += pageCount;
 
@@ -230,7 +417,7 @@ export const countRecordsBatch = async (
       const functionUrl = `RetrieveTotalRecordCount(EntityNames=@p)?@p=${encodeURIComponent(
         entityNamesJson,
       )}`;
-      const response = await window.dataverseAPI.queryData(functionUrl);
+      const response = await globalThis.dataverseAPI.queryData(functionUrl);
 
       // Response contains EntityRecordCountCollection with separate Keys and Values arrays
       const entityRecordCounts = (response as any).EntityRecordCountCollection;
@@ -308,7 +495,7 @@ const loadAllData = async (fullUrl: string) => {
 
     logger.info(`Cleaned URL: ${relativePath}`);
 
-    const response = await window.dataverseAPI.queryData(relativePath);
+    const response = await globalThis.dataverseAPI.queryData(relativePath);
 
     // Add the current page of results
     allRecords.push(...response.value);

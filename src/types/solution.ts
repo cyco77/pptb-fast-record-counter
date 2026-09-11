@@ -3,4 +3,6 @@ export type Solution = {
   friendlyname: string;
   uniquename: string;
   version: string;
+  publisherName?: string;
+  publisherUniqueName?: string;
 };

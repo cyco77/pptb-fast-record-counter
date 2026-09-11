@@ -54,8 +54,6 @@ export default defineConfig({
         // Use IIFE format for compatibility with iframe srcdoc loading
         // ES modules can have issues when loaded via file:// URLs in iframes
         format: "iife",
-        // Bundle everything into a single file to avoid module loading issues
-        inlineDynamicImports: true,
       },
     },
   },

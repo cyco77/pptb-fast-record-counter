@@ -1,0 +1,41 @@
+{
+  "invocation": {
+    "version": "1.5.0",
+    "capabilities": ["entity-picker", "solution-selector"],
+    "prefill": {
+      "properties": {
+        "solutionId": { "type": "string" },
+        "solutionName": { "type": "string" },
+        "solutionUniqueName": { "type": "string" },
+        "publisher": { "type": "string" },
+        "entityNames": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "returnTopic": {
+      "properties": {
+        "status": { "type": "string", "enum": ["success", "solution-selection-required"] },
+        "filterApplied": { "type": "boolean" },
+        "requestedSolution": { "type": "object" },
+        "message": { "type": "string" },
+        "solutions": { "type": "array", "items": { "type": "object" } },
+        "suggestions": { "type": "array", "items": { "type": "object" } },
+        "solution": { "type": "object" },
+        "entities": { "type": "array", "items": { "type": "object" } },
+        "recordCounts": { "type": "array", "items": { "type": "object" } },
+        "totalEntities": { "type": "number" },
+        "totalRecords": { "type": "number" }
+      }
+    }
+  },
+  "agents": {
+    "version": "1.5.0",
+    "invokable": true,
+    "modes": ["one-way", "two-way"],
+    "defaultMode": "two-way",
+    "timeoutMS": 120000,
+    "headless": true,
+    "executionModes": ["windowed", "headless"],
+    "defaultExecutionMode": "headless",
+    "headlessEntry": "dist/headless.js"
+  }
+}

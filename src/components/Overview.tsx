@@ -6,6 +6,7 @@ import {
   loadAllViews,
   countRecords,
   countRecordsBatch,
+  resolveSolution,
 } from "../services/dataverseService";
 import { Entity } from "../types/entity";
 import { Solution } from "../types/solution";
@@ -127,6 +128,51 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       const loadedSolutions = await loadSolutions();
       setSolutions(loadedSolutions);
       logger.info(`Fetched ${loadedSolutions.length} solutions`);
+
+      // MCP/windowed invocations can prefill a solution selector. If the
+      // selector is ambiguous or unknown, leave it unset so the user can pick
+      // the intended solution from the loaded list.
+      const launchContext = await window.toolboxAPI.invocation.getLaunchContext();
+      const hasSolutionSelector =
+        launchContext &&
+        ["solutionId", "solutionName", "solutionUniqueName", "publisher"].some(
+          (key) => typeof launchContext[key] === "string" && launchContext[key],
+        );
+      if (hasSolutionSelector) {
+        const resolution = resolveSolution(loadedSolutions, {
+          solutionId:
+            typeof launchContext.solutionId === "string"
+              ? launchContext.solutionId
+              : undefined,
+          solutionName:
+            typeof launchContext.solutionName === "string"
+              ? launchContext.solutionName
+              : undefined,
+          solutionUniqueName:
+            typeof launchContext.solutionUniqueName === "string"
+              ? launchContext.solutionUniqueName
+              : undefined,
+          publisher:
+            typeof launchContext.publisher === "string"
+              ? launchContext.publisher
+              : undefined,
+        });
+        if (resolution.status === "resolved") {
+          setSelectedSolutionId(resolution.solution.solutionid);
+        } else if (resolution.solutions.length === 0) {
+          await showNotification(
+            "Solution selection required",
+            "The requested solution was not found. Please select a solution.",
+            "warning",
+          );
+        } else if (resolution.solutions.length > 1) {
+          await showNotification(
+            "Solution selection required",
+            "More than one solution matches the request. Please select one.",
+            "warning",
+          );
+        }
+      }
     } catch (error) {
       logger.error(`Error querying solutions: ${(error as Error).message}`);
       await showNotification(

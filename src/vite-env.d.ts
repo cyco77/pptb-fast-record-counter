@@ -26,6 +26,8 @@ declare global {
     toolboxAPI: typeof import("@pptb/types").toolboxAPI;
     dataverseAPI: typeof import("@pptb/types").dataverseAPI;
   }
+
+  var dataverseAPI: typeof import("@pptb/types").dataverseAPI;
 }
 
 export {};
