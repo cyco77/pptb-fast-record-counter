@@ -46,6 +46,8 @@ const useStyles = makeStyles({
   content: {
     padding: tokens.spacingVerticalL,
     flex: 1,
+    display: "flex",
+    flexDirection: "column",
     overflow: "hidden",
     minHeight: 0,
   },

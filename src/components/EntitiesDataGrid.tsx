@@ -23,7 +23,7 @@ import { Entity } from "../types/entity";
 
 const useStyles = makeStyles({
   scrollWrapper: {
-    height: "100%",
+    minHeight: 0,
     overflow: "auto",
     position: "relative",
   },

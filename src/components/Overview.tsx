@@ -61,8 +61,8 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       flex: 1,
       display: "flex",
       flexDirection: "column",
-      overflow: "hidden",
       minHeight: 0,
+      overflow: "auto",
     },
     eventLogSection: {
       flexShrink: 0,
