@@ -195,10 +195,14 @@ export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
   let entities = allRecords
     .filter((record: any) => !record.DataProviderId) // Exclude virtual entities
     .map((record: any) => ({
-      logicalname: record.LogicalName,
+      logicalname: String(record.LogicalName || ""),
       displayname:
-        record.DisplayName?.UserLocalizedLabel?.Label || record.LogicalName,
-      entitysetname: record.EntitySetName,
+        String(
+          record.DisplayName?.UserLocalizedLabel?.Label ||
+            record.LogicalName ||
+            "Unknown entity",
+        ),
+      entitysetname: String(record.EntitySetName || ""),
     }));
 
   // If a solution is selected, filter entities by solution components
@@ -262,11 +266,17 @@ export const loadAllViews = async (): Promise<Map<string, View[]>> => {
     const viewsByEntity = new Map<string, View[]>();
 
     allRecords.forEach((record: any) => {
+      const savedqueryid = String(record.savedqueryid || "");
+      const returnedtypecode = String(record.returnedtypecode || "");
+      if (!savedqueryid || !returnedtypecode) {
+        return;
+      }
+
       const view: View = {
-        savedqueryid: record.savedqueryid,
-        name: record.name,
-        returnedtypecode: record.returnedtypecode,
-        fetchxml: record.fetchxml,
+        savedqueryid,
+        name: String(record.name || savedqueryid),
+        returnedtypecode,
+        fetchxml: typeof record.fetchxml === "string" ? record.fetchxml : undefined,
       };
 
       const entityName = record.returnedtypecode;

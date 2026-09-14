@@ -9,15 +9,11 @@ import {
   createTableColumn,
   makeStyles,
   tokens,
-  Dropdown,
-  Option,
   Spinner,
 } from "@fluentui/react-components";
 import type {
   DataGridProps,
   JSXElement,
-  OptionOnSelectData,
-  SelectionEvents,
 } from "@fluentui/react-components";
 import { Entity } from "../types/entity";
 
@@ -59,6 +55,14 @@ const useStyles = makeStyles({
   },
   viewDropdown: {
     width: "100%",
+    minHeight: "32px",
+    padding: "0 8px",
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground1,
+    fontFamily: "inherit",
+    fontSize: "inherit",
   },
 });
 
@@ -118,34 +122,28 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
         const selectedView = item.views?.find(
           (v) => v.savedqueryid === item.selectedViewId,
         );
-        const displayValue = selectedView ? selectedView.name : ALL_VALUE;
-
-        const handleViewChange = (
-          _event: SelectionEvents,
-          data: OptionOnSelectData,
-        ) => {
-          const viewId =
-            data.optionValue === ALL_VALUE ? undefined : data.optionValue;
-          props.onViewChange(item.logicalname, viewId);
-        };
+        const selectedValue = selectedView?.savedqueryid || ALL_VALUE;
 
         return (
-          <Dropdown
-            value={displayValue}
-            selectedOptions={[item.selectedViewId || ALL_VALUE]}
-            onOptionSelect={handleViewChange}
+          <select
+            value={selectedValue}
+            onChange={(event) =>
+              props.onViewChange(
+                item.logicalname,
+                event.target.value === ALL_VALUE
+                  ? undefined
+                  : event.target.value,
+              )
+            }
             className={styles.viewDropdown}
-            size="medium"
           >
-            <Option key="all" value={ALL_VALUE}>
-              All
-            </Option>
+            <option value={ALL_VALUE}>All</option>
             {item.views?.map((view) => (
-              <Option key={view.savedqueryid} value={view.savedqueryid}>
-                {view.name}
-              </Option>
+              <option key={view.savedqueryid} value={view.savedqueryid}>
+                {view.name || view.savedqueryid}
+              </option>
             ))}
-          </Dropdown>
+          </select>
         );
       },
     }),
