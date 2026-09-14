@@ -227,7 +227,9 @@ const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> =
   const components = await loadAllData(url);
 
   // Get entity metadata IDs from solution components
-  const entityMetadataIds = components.map((comp: any) => comp.objectid);
+  const entityMetadataIds = components
+    .map((comp: any) => normalizeGuid(comp.objectid))
+    .filter(Boolean);
 
   if (entityMetadataIds.length === 0) {
     throw new Error(
@@ -235,9 +237,7 @@ const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> =
     );
   }
 
-  const normalizedMetadataIds = new Set(
-    entityMetadataIds.map(normalizeGuid).filter(Boolean),
-  );
+  const normalizedMetadataIds = new Set(entityMetadataIds);
 
   // Query EntityDefinitions to get logical names for these metadata IDs
   const entityDefsUrl = `EntityDefinitions?$select=LogicalName,MetadataId&$filter=IsCustomizable/Value eq true`;
@@ -245,7 +245,7 @@ const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> =
 
   const logicalNames = entityDefs
     .filter((def: any) => normalizedMetadataIds.has(normalizeGuid(def.MetadataId)))
-    .map((def: any) => String(def.LogicalName).toLowerCase())
+    .map((def: any) => String(def.LogicalName || "").trim().toLowerCase())
     .filter(Boolean);
 
   if (logicalNames.length === 0) {

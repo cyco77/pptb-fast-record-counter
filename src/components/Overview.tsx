@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import type { DataGridProps } from "@fluentui/react-components";
 import {
   loadEntities,
@@ -36,9 +36,8 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     sortColumn: "displayname",
     sortDirection: "ascending",
   });
-  const [viewsByEntity, setViewsByEntity] = useState<Map<string, any[]>>(
-    new Map(),
-  );
+  const viewsByEntityRef = useRef<Map<string, any[]>>(new Map());
+  const entityRequestRef = useRef(0);
 
   const useStyles = makeStyles({
     overviewRoot: {
@@ -82,7 +81,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       // Load all views in background (non-blocking)
       loadAllViews()
         .then((views) => {
-          setViewsByEntity(views);
+          viewsByEntityRef.current = views;
           setEntities((currentEntities) =>
             currentEntities.map((entity) => ({
               ...entity,
@@ -185,12 +184,24 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   }, [showNotification]);
 
   const queryEntities = useCallback(async () => {
+    const requestId = ++entityRequestRef.current;
+    const solutionIdAtRequest = selectedSolutionId;
+
     try {
       setIsLoadingEntities(true);
-      const loadedEntities = await loadEntities(selectedSolutionId);
+      const loadedEntities = await loadEntities(solutionIdAtRequest);
+
+      // Ignore responses from an earlier selection if the user changed the
+      // solution while its metadata was still loading.
+      if (requestId !== entityRequestRef.current) {
+        return;
+      }
 
       const nonBlacklistedEntities = loadedEntities.filter(
-        (entity) => !isEntityBlacklisted(entity.logicalname),
+        (entity) =>
+          entity.logicalname.length > 0 &&
+          entity.entitysetname.length > 0 &&
+          !isEntityBlacklisted(entity.logicalname),
       );
       const blacklistedCount =
         loadedEntities.length - nonBlacklistedEntities.length;
@@ -202,19 +213,22 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
       // Assign views to each entity from cached views
       const entitiesWithViews = nonBlacklistedEntities.map((entity) => {
-        const views = viewsByEntity.get(entity.logicalname) || [];
+        const views = viewsByEntityRef.current.get(entity.logicalname) || [];
         return { ...entity, views };
       });
 
       setEntities(entitiesWithViews);
       logger.info(`Fetched ${entitiesWithViews.length} entities with views`);
-      const solutionMsg = selectedSolutionId ? " for selected solution" : "";
+      const solutionMsg = solutionIdAtRequest ? " for selected solution" : "";
       await showNotification(
         "Entities Loaded",
         `Successfully loaded ${entitiesWithViews.length} entities${solutionMsg}`,
         "success",
       );
     } catch (error) {
+      if (requestId !== entityRequestRef.current) {
+        return;
+      }
       logger.error(`Error querying entities: ${(error as Error).message}`);
       await showNotification(
         "Error",
@@ -222,9 +236,11 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         "error",
       );
     } finally {
-      setIsLoadingEntities(false);
+      if (requestId === entityRequestRef.current) {
+        setIsLoadingEntities(false);
+      }
     }
-  }, [selectedSolutionId, showNotification, viewsByEntity]);
+  }, [selectedSolutionId, showNotification]);
 
   useEffect(() => {
     // Reload entities when the connection or solution filter changes.
