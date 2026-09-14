@@ -1,6 +1,26 @@
-import { makeStyles, Spinner, tokens } from "@fluentui/react-components";
-import type { DataGridProps, JSXElement } from "@fluentui/react-components";
+import {
+  DataGrid,
+  DataGridBody,
+  DataGridCell,
+  DataGridHeader,
+  DataGridHeaderCell,
+  DataGridRow,
+  Dropdown,
+  Option,
+  Spinner,
+  createTableColumn,
+  makeStyles,
+  tokens,
+} from "@fluentui/react-components";
+import type {
+  DataGridProps,
+  JSXElement,
+  OptionOnSelectData,
+  SelectionEvents,
+  TableColumnDefinition,
+} from "@fluentui/react-components";
 import { Entity } from "../types/entity";
+import { logger } from "../services/loggerService";
 
 const useStyles = makeStyles({
   scrollWrapper: {
@@ -19,25 +39,11 @@ const useStyles = makeStyles({
     overflowY: "auto",
     flex: 1,
   },
-  table: {
-    width: "100%",
-    minWidth: "max-content",
-    borderCollapse: "collapse",
-  },
-  headerCell: {
+  stickyHeader: {
     position: "sticky",
     top: 0,
-    zIndex: 1,
+    zIndex: 10,
     backgroundColor: tokens.colorNeutralBackground1,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
-    padding: "8px 12px",
-    textAlign: "left",
-    whiteSpace: "nowrap",
-  },
-  cell: {
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-    padding: "8px 12px",
-    verticalAlign: "middle",
   },
   cellStyles: {
     whiteSpace: "nowrap",
@@ -74,76 +80,122 @@ export interface IEntitiesDataGridProps {
 
 export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
   const styles = useStyles();
+  logger.info(
+    `Rendering entity grid: ${props.items.length} rows (${props.items.filter((item) => !item.logicalname || !item.displayname).length} malformed)`,
+  );
+
+  const columns: TableColumnDefinition<Entity>[] = [
+    createTableColumn<Entity>({
+      columnId: "displayname",
+      compare: (a, b) => a.displayname.localeCompare(b.displayname),
+      renderHeaderCell: () => "Display Name",
+      renderCell: (item) => (
+        <span title={item.displayname} className={styles.cellStyles}>
+          {item.displayname}
+        </span>
+      ),
+    }),
+    createTableColumn<Entity>({
+      columnId: "logicalname",
+      compare: (a, b) => a.logicalname.localeCompare(b.logicalname),
+      renderHeaderCell: () => "Logical Name",
+      renderCell: (item) => (
+        <span title={item.logicalname} className={styles.cellStyles}>
+          {item.logicalname}
+        </span>
+      ),
+    }),
+    createTableColumn<Entity>({
+      columnId: "views",
+      compare: () => 0,
+      renderHeaderCell: () => "View",
+      renderCell: (item) => {
+        const allValue = "All";
+        const selectedView = item.views?.find(
+          (view) => view.savedqueryid === item.selectedViewId,
+        );
+        const handleViewChange = (
+          _event: SelectionEvents,
+          data: OptionOnSelectData,
+        ) => {
+          props.onViewChange(
+            item.logicalname,
+            data.optionValue === allValue ? undefined : data.optionValue,
+          );
+        };
+
+        return (
+          <Dropdown
+            value={selectedView?.name || allValue}
+            selectedOptions={[item.selectedViewId || allValue]}
+            onOptionSelect={handleViewChange}
+            className={styles.viewDropdown}
+            size="medium"
+          >
+            <Option value={allValue}>All</Option>
+            {item.views?.map((view) => (
+              <Option key={view.savedqueryid} value={view.savedqueryid}>
+                {view.name || view.savedqueryid}
+              </Option>
+            ))}
+          </Dropdown>
+        );
+      },
+    }),
+    createTableColumn<Entity>({
+      columnId: "recordCount",
+      compare: (a, b) => (a.recordCount ?? -1) - (b.recordCount ?? -1),
+      renderHeaderCell: () => <div style={{ textAlign: "right" }}>Record Count</div>,
+      renderCell: (item) =>
+        item.isLoading ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+            <Spinner size="tiny" />
+            <span>Progressing...</span>
+          </div>
+        ) : (
+          <div style={{ textAlign: "right" }}>
+            {item.recordCount !== undefined ? item.recordCount.toLocaleString() : "-"}
+          </div>
+        ),
+    }),
+  ];
+
+  const columnSizingOptions = {
+    displayname: { minWidth: 300, defaultWidth: 300 },
+    logicalname: { minWidth: 300, defaultWidth: 300 },
+    views: { minWidth: 450, defaultWidth: 450 },
+  };
 
   return (
     <div className={styles.scrollWrapper}>
-      <div className={styles.gridContainer}>
-        <div className={styles.gridBody}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.headerCell}>Display Name</th>
-                <th className={styles.headerCell}>Logical Name</th>
-                <th className={styles.headerCell}>View</th>
-                <th className={styles.headerCell}>Record Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {props.items.map((item) => {
-                const allValue = "All";
-                const selectedView = item.views?.find(
-                  (view) => view.savedqueryid === item.selectedViewId,
-                );
-                const selectedValue = selectedView?.savedqueryid || allValue;
-
-                return (
-                  <tr key={item.logicalname}>
-                    <td className={styles.cell} title={item.displayname}>
-                      {item.displayname}
-                    </td>
-                    <td className={styles.cell} title={item.logicalname}>
-                      {item.logicalname}
-                    </td>
-                    <td className={styles.cell}>
-                      <select
-                        value={selectedValue}
-                        onChange={(event) =>
-                          props.onViewChange(
-                            item.logicalname,
-                            event.target.value === allValue
-                              ? undefined
-                              : event.target.value,
-                          )
-                        }
-                        className={styles.viewDropdown}
-                      >
-                        <option value={allValue}>All</option>
-                        {item.views?.map((view) => (
-                          <option
-                            key={view.savedqueryid}
-                            value={view.savedqueryid}
-                          >
-                            {view.name || view.savedqueryid}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className={styles.cell}>
-                      {item.isLoading ? (
-                        <Spinner size="tiny" />
-                      ) : item.recordCount !== undefined ? (
-                        item.recordCount.toLocaleString()
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataGrid
+        items={props.items}
+        columns={columns}
+        sortable
+        sortState={props.sortState}
+        onSortChange={props.onSortChange}
+        getRowId={(item) => item.logicalname}
+        className={styles.gridContainer}
+        resizableColumns
+        columnSizingOptions={columnSizingOptions}
+      >
+        <DataGridHeader className={styles.stickyHeader}>
+          <DataGridRow>
+            {({ renderHeaderCell }) => (
+              <DataGridHeaderCell>{renderHeaderCell()}</DataGridHeaderCell>
+            )}
+          </DataGridRow>
+        </DataGridHeader>
+        <DataGridBody<Entity> className={styles.gridBody}>
+          {({ item, rowId }) => (
+            <DataGridRow<Entity> key={rowId}>
+              {({ renderCell }) => (
+                <DataGridCell>{renderCell(item)}</DataGridCell>
+              )}
+            </DataGridRow>
+          )}
+        </DataGridBody>
+      </DataGrid>
     </div>
   );
 };

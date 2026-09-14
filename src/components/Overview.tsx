@@ -15,6 +15,7 @@ import { EntitiesDataGrid } from "./EntitiesDataGrid";
 import { makeStyles, Spinner } from "@fluentui/react-components";
 import { logger } from "../services/loggerService";
 import { isEntityBlacklisted } from "../utils/entityBlacklist";
+import { EntityGridErrorBoundary } from "./EntityGridErrorBoundary";
 
 interface IOverviewProps {
   connection: ToolBoxAPI.DataverseConnection | null;
@@ -186,10 +187,16 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const queryEntities = useCallback(async () => {
     const requestId = ++entityRequestRef.current;
     const solutionIdAtRequest = selectedSolutionId;
+    logger.info(
+      `Starting entity request ${requestId} for solution ${solutionIdAtRequest || "All"}`,
+    );
 
     try {
       setIsLoadingEntities(true);
       const loadedEntities = await loadEntities(solutionIdAtRequest);
+      logger.info(
+        `Entity request ${requestId} returned ${loadedEntities.length} rows for solution ${solutionIdAtRequest || "All"}`,
+      );
 
       // Ignore responses from an earlier selection if the user changed the
       // solution while its metadata was still loading.
@@ -216,6 +223,13 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         const views = viewsByEntityRef.current.get(entity.logicalname) || [];
         return { ...entity, views };
       });
+
+      logger.info(
+        `Entity request ${requestId} prepared ${entitiesWithViews.length} rows; first rows: ${entitiesWithViews
+          .slice(0, 5)
+          .map((entity) => `${entity.logicalname}/${entity.entitysetname}`)
+          .join(", ")}`,
+      );
 
       setEntities(entitiesWithViews);
       logger.info(`Fetched ${entitiesWithViews.length} entities with views`);
@@ -630,17 +644,17 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
           {entities.length > 0 && (
             <div className={styles.dataGridSection}>
-              <EntitiesDataGrid
-                items={sortedEntities}
-                onViewChange={handleViewChange}
-                sortState={sortState}
-                onSortChange={(
-                  _event: Parameters<NonNullable<DataGridProps["onSortChange"]>>[0],
-                  nextSortState: Parameters<NonNullable<DataGridProps["onSortChange"]>>[1],
-                ) =>
-                  setSortState(nextSortState)
-                }
-              />
+              <EntityGridErrorBoundary rowCount={sortedEntities.length}>
+                <EntitiesDataGrid
+                  items={sortedEntities}
+                  onViewChange={handleViewChange}
+                  sortState={sortState}
+                  onSortChange={(
+                    _event: Parameters<NonNullable<DataGridProps["onSortChange"]>>[0],
+                    nextSortState: Parameters<NonNullable<DataGridProps["onSortChange"]>>[1],
+                  ) => setSortState(nextSortState)}
+                />
+              </EntityGridErrorBoundary>
             </div>
           )}
 
