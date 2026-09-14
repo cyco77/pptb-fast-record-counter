@@ -21,6 +21,7 @@ import type {
 } from "@fluentui/react-components";
 import { Entity } from "../types/entity";
 import { logger } from "../services/loggerService";
+import { useState } from "react";
 
 const useStyles = makeStyles({
   scrollWrapper: {
@@ -80,6 +81,7 @@ export interface IEntitiesDataGridProps {
 
 export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
   const styles = useStyles();
+  const [openViewEntity, setOpenViewEntity] = useState<string | undefined>();
   logger.info(
     `Rendering entity grid: ${props.items.length} rows (${props.items.filter((item) => !item.logicalname || !item.displayname).length} malformed)`,
   );
@@ -128,16 +130,20 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
           <Dropdown
             value={selectedView?.name || allValue}
             selectedOptions={[item.selectedViewId || allValue]}
+            onOpenChange={(_event, data) => {
+              setOpenViewEntity(data.open ? item.logicalname : undefined);
+            }}
             onOptionSelect={handleViewChange}
             className={styles.viewDropdown}
             size="medium"
           >
             <Option value={allValue}>All</Option>
-            {item.views?.map((view) => (
-              <Option key={view.savedqueryid} value={view.savedqueryid}>
-                {view.name || view.savedqueryid}
-              </Option>
-            ))}
+            {openViewEntity === item.logicalname &&
+              item.views?.map((view) => (
+                <Option key={view.savedqueryid} value={view.savedqueryid}>
+                  {view.name || view.savedqueryid}
+                </Option>
+              ))}
           </Dropdown>
         );
       },

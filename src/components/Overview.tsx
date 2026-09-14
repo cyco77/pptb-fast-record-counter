@@ -234,7 +234,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       setEntities(entitiesWithViews);
       logger.info(`Fetched ${entitiesWithViews.length} entities with views`);
       const solutionMsg = solutionIdAtRequest ? " for selected solution" : "";
-      await showNotification(
+      void showNotification(
         "Entities Loaded",
         `Successfully loaded ${entitiesWithViews.length} entities${solutionMsg}`,
         "success",
