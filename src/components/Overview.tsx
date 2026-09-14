@@ -62,7 +62,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       display: "flex",
       flexDirection: "column",
       minHeight: 0,
-      overflow: "auto",
+      overflow: "hidden",
     },
     eventLogSection: {
       flexShrink: 0,
@@ -83,6 +83,12 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       loadAllViews()
         .then((views) => {
           setViewsByEntity(views);
+          setEntities((currentEntities) =>
+            currentEntities.map((entity) => ({
+              ...entity,
+              views: views.get(entity.logicalname) || [],
+            })),
+          );
           logger.info(`Loaded views for ${views.size} entities in background`);
         })
         .catch((error) => {
@@ -94,13 +100,6 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
     initialize();
   }, [connection]);
-
-  useEffect(() => {
-    // Reload entities when solution filter changes
-    if (connection) {
-      queryEntities();
-    }
-  }, [selectedSolutionId]);
 
   const showNotification = useCallback(
     async (
@@ -225,7 +224,14 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     } finally {
       setIsLoadingEntities(false);
     }
-  }, [selectedSolutionId, showNotification]);
+  }, [selectedSolutionId, showNotification, viewsByEntity]);
+
+  useEffect(() => {
+    // Reload entities when the connection or solution filter changes.
+    if (connection) {
+      queryEntities();
+    }
+  }, [connection, queryEntities]);
 
   const filteredEntities = React.useMemo(() => {
     if (!textFilter) {

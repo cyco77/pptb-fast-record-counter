@@ -23,12 +23,20 @@ import { Entity } from "../types/entity";
 
 const useStyles = makeStyles({
   scrollWrapper: {
-    minHeight: 0,
-    overflow: "auto",
-    position: "relative",
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   },
   gridContainer: {
-    minWidth: "max-content",
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  gridBody: {
+    overflowY: "auto",
+    flex: 1,
   },
   stickyHeader: {
     position: "sticky",
@@ -214,7 +222,7 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
             )}
           </DataGridRow>
         </DataGridHeader>
-        <DataGridBody<Entity>>
+        <DataGridBody<Entity> className={styles.gridBody}>
           {({ item, rowId }) => (
             <DataGridRow<Entity> key={rowId}>
               {({ renderCell }) => (

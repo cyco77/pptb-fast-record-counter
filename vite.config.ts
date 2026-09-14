@@ -54,6 +54,8 @@ export default defineConfig({
         // Use IIFE format for compatibility with iframe srcdoc loading
         // ES modules can have issues when loaded via file:// URLs in iframes
         format: "iife",
+        // Keep the tool UI in one bundle for the VS Code webview loader.
+        inlineDynamicImports: true,
       },
     },
   },
