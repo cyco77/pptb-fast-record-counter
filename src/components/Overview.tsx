@@ -634,7 +634,10 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
                 items={sortedEntities}
                 onViewChange={handleViewChange}
                 sortState={sortState}
-                onSortChange={(_event, nextSortState) =>
+                onSortChange={(
+                  _event: Parameters<NonNullable<DataGridProps["onSortChange"]>>[0],
+                  nextSortState: Parameters<NonNullable<DataGridProps["onSortChange"]>>[1],
+                ) =>
                   setSortState(nextSortState)
                 }
               />
