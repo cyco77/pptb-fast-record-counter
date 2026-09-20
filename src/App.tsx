@@ -24,8 +24,12 @@ const useStyles = makeStyles({
     overflow: "hidden",
   },
   header: {
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
     padding: tokens.spacingVerticalL,
     paddingBottom: tokens.spacingVerticalS,
+    backgroundColor: tokens.colorNeutralBackground1,
     borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
     gap: tokens.spacingVerticalXXS,
     flexShrink: 0,
@@ -34,6 +38,8 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     gap: tokens.spacingHorizontalM,
+    minWidth: 0,
+    flexWrap: "wrap",
   },
   headerIcon: {
     height: "50px",
@@ -42,6 +48,7 @@ const useStyles = makeStyles({
   subtitle: {
     color: tokens.colorNeutralForeground3,
     fontSize: tokens.fontSizeBase300,
+    minWidth: 0,
   },
   content: {
     padding: tokens.spacingVerticalL,

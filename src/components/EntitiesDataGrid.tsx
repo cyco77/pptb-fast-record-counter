@@ -25,20 +25,23 @@ import { useState } from "react";
 
 const useStyles = makeStyles({
   scrollWrapper: {
-    height: "100%",
+    height: "auto",
     display: "flex",
     flexDirection: "column",
-    overflow: "hidden",
+    overflow: "visible",
+    minWidth: "max-content",
   },
   gridContainer: {
-    height: "100%",
+    height: "auto",
+    width: "max-content",
+    minWidth: "max-content",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
   },
   gridBody: {
-    overflowY: "auto",
-    flex: 1,
+    overflow: "visible",
+    flex: "none",
   },
   stickyHeader: {
     position: "sticky",

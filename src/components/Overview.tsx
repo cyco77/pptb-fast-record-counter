@@ -24,9 +24,8 @@ interface IOverviewProps {
 export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   const [solutions, setSolutions] = useState<Solution[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
-  const [selectedSolutionId, setSelectedSolutionId] = useState<
-    string | undefined
-  >(undefined);
+  const [selectedSolutionIds, setSelectedSolutionIds] = useState<string[]>([]);
+  const [selectedPublishers, setSelectedPublishers] = useState<string[]>([]);
   const [textFilter, setTextFilter] = useState<string>("");
   const [isLoadingEntities, setIsLoadingEntities] = useState(false);
   const [isLoadingSolutions, setIsLoadingSolutions] = useState(false);
@@ -39,14 +38,34 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
   });
   const viewsByEntityRef = useRef<Map<string, any[]>>(new Map());
   const entityRequestRef = useRef(0);
+  const connectionRequestRef = useRef(0);
+
+  const publishers = React.useMemo(
+    () =>
+      [...new Set(solutions.map((solution) => solution.publisherName).filter(Boolean) as string[])].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [solutions],
+  );
+  const publisherSolutions = React.useMemo(
+    () =>
+      selectedPublishers.length
+        ? solutions.filter((solution) =>
+            solution.publisherName && selectedPublishers.includes(solution.publisherName),
+          )
+        : solutions,
+    [selectedPublishers, solutions],
+  );
 
   const useStyles = makeStyles({
     overviewRoot: {
       height: "100%",
+      minHeight: 0,
       display: "flex",
       flexDirection: "column",
       gap: "16px",
-      overflow: "hidden",
+      minWidth: 0,
+      position: "relative",
     },
     filterSection: {
       flexShrink: 0,
@@ -62,7 +81,20 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
       display: "flex",
       flexDirection: "column",
       minHeight: 0,
-      overflow: "hidden",
+      minWidth: 0,
+      overflow: "auto",
+      position: "relative",
+    },
+    loadingOverlay: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 2,
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "center",
+      paddingTop: "12px",
+      pointerEvents: "none",
+      backgroundColor: "color-mix(in srgb, var(--colorNeutralBackground1) 35%, transparent)",
     },
     eventLogSection: {
       flexShrink: 0,
@@ -75,10 +107,22 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
   useEffect(() => {
     const initialize = async () => {
+      const requestId = ++connectionRequestRef.current;
+      // Filters belong to the active Dataverse connection and must not leak
+      // into a newly selected environment.
+      setSelectedPublishers([]);
+      setSelectedSolutionIds([]);
+      setTextFilter("");
+      setEntities([]);
+      setSolutions([]);
+
       if (!connection) {
         return;
       }
-      await querySolutions();
+      await querySolutions(requestId);
+      if (requestId !== connectionRequestRef.current) {
+        return;
+      }
       // Load all views in background (non-blocking)
       loadAllViews()
         .then((views) => {
@@ -121,10 +165,16 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
     [],
   );
 
-  const querySolutions = useCallback(async () => {
+  const querySolutions = useCallback(async (requestId?: number) => {
     try {
       setIsLoadingSolutions(true);
       const loadedSolutions = await loadSolutions();
+      if (
+        requestId !== undefined &&
+        requestId !== connectionRequestRef.current
+      ) {
+        return;
+      }
       setSolutions(loadedSolutions);
       logger.info(`Fetched ${loadedSolutions.length} solutions`);
 
@@ -157,7 +207,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
               : undefined,
         });
         if (resolution.status === "resolved") {
-          setSelectedSolutionId(resolution.solution.solutionid);
+          setSelectedSolutionIds([resolution.solution.solutionid]);
         } else if (resolution.solutions.length === 0) {
           await showNotification(
             "Solution selection required",
@@ -186,16 +236,20 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
   const queryEntities = useCallback(async () => {
     const requestId = ++entityRequestRef.current;
-    const solutionIdAtRequest = selectedSolutionId;
+    const solutionIdsAtRequest = selectedSolutionIds.length
+      ? selectedSolutionIds
+      : selectedPublishers.length
+        ? publisherSolutions.map((solution) => solution.solutionid)
+        : undefined;
     logger.info(
-      `Starting entity request ${requestId} for solution ${solutionIdAtRequest || "All"}`,
+      `Starting entity request ${requestId} for solutions ${solutionIdsAtRequest?.join(", ") || "All"}`,
     );
 
     try {
       setIsLoadingEntities(true);
-      const loadedEntities = await loadEntities(solutionIdAtRequest);
+      const loadedEntities = await loadEntities(solutionIdsAtRequest);
       logger.info(
-        `Entity request ${requestId} returned ${loadedEntities.length} rows for solution ${solutionIdAtRequest || "All"}`,
+        `Entity request ${requestId} returned ${loadedEntities.length} rows for selected filters`,
       );
 
       // Ignore responses from an earlier selection if the user changed the
@@ -233,12 +287,6 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
       setEntities(entitiesWithViews);
       logger.info(`Fetched ${entitiesWithViews.length} entities with views`);
-      const solutionMsg = solutionIdAtRequest ? " for selected solution" : "";
-      void showNotification(
-        "Entities Loaded",
-        `Successfully loaded ${entitiesWithViews.length} entities${solutionMsg}`,
-        "success",
-      );
     } catch (error) {
       if (requestId !== entityRequestRef.current) {
         return;
@@ -254,7 +302,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         setIsLoadingEntities(false);
       }
     }
-  }, [selectedSolutionId, showNotification]);
+  }, [publisherSolutions, selectedPublishers, selectedSolutionIds, showNotification]);
 
   useEffect(() => {
     // Reload entities when the connection or solution filter changes.
@@ -490,38 +538,26 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         try {
           const entityNames = entitiesWithoutViews.map((e) => e.logicalname);
           const counts = await countRecordsBatch(entityNames);
-
-          // Update all entities at once with their counts
           setEntities((prev) =>
-            prev.map((e) => {
-              if (counts.hasOwnProperty(e.logicalname)) {
-                return {
-                  ...e,
-                  recordCount: counts[e.logicalname],
-                  isLoading: false,
-                };
-              }
-              return e;
-            }),
+            prev.map((e) =>
+              Object.prototype.hasOwnProperty.call(counts, e.logicalname)
+                ? { ...e, recordCount: counts[e.logicalname], isLoading: false }
+                : e,
+            ),
           );
-
           logger.info(
             `Batch count completed for ${entitiesWithoutViews.length} entities`,
           );
         } catch (error) {
           logger.error(`Error in batch counting: ${(error as Error).message}`);
-          // Mark failed entities
           setEntities((prev) =>
-            prev.map((e) => {
-              if (
-                entitiesWithoutViews.find(
-                  (ev) => ev.logicalname === e.logicalname,
-                )
-              ) {
-                return { ...e, recordCount: 0, isLoading: false };
-              }
-              return e;
-            }),
+            prev.map((e) =>
+              entitiesWithoutViews.some(
+                (entity) => entity.logicalname === e.logicalname,
+              )
+                ? { ...e, recordCount: 0, isLoading: false }
+                : e,
+            ),
           );
           await showNotification(
             "Error",
@@ -607,7 +643,7 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
   return (
     <div className={styles.overviewRoot}>
-      {isLoadingEntities || isLoadingSolutions ? (
+      {isLoadingSolutions ? (
         <div className={styles.loadingContainer}>
           <Spinner
             label={
@@ -621,14 +657,32 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
         <>
           <div className={styles.filterSection}>
             <Filter
-              solutions={solutions}
-              selectedSolutionId={selectedSolutionId}
+              solutions={publisherSolutions}
+              publishers={publishers}
+              selectedPublishers={selectedPublishers}
+              selectedSolutionIds={selectedSolutionIds}
               textFilter={textFilter}
-              onSolutionFilterChanged={(solutionId: string | undefined) => {
-                logger.info(
-                  `Solution filter changed to: ${solutionId || "All"}`,
+              onPublisherFilterChanged={(publishers) => {
+                setSelectedPublishers(publishers);
+                const availableSolutionIds = new Set(
+                  solutions
+                    .filter(
+                      (solution) =>
+                        !publishers.length ||
+                        (solution.publisherName &&
+                          publishers.includes(solution.publisherName)),
+                    )
+                    .map((solution) => solution.solutionid),
                 );
-                setSelectedSolutionId(solutionId);
+                setSelectedSolutionIds((currentIds) =>
+                  currentIds.filter((solutionId) => availableSolutionIds.has(solutionId)),
+                );
+              }}
+              onSolutionFilterChanged={(solutionIds: string[]) => {
+                logger.info(
+                  `Solution filter changed to: ${solutionIds.join(", ") || "All"}`,
+                );
+                setSelectedSolutionIds(solutionIds);
               }}
               onTextFilterChanged={(searchText: string) => {
                 setTextFilter(searchText);
@@ -644,6 +698,11 @@ export const Overview: React.FC<IOverviewProps> = ({ connection }) => {
 
           {entities.length > 0 && (
             <div className={styles.dataGridSection}>
+              {isLoadingEntities && (
+                <div className={styles.loadingOverlay}>
+                  <Spinner size="tiny" label="Updating entities..." />
+                </div>
+              )}
               <EntityGridErrorBoundary rowCount={sortedEntities.length}>
                 <EntitiesDataGrid
                   items={sortedEntities}

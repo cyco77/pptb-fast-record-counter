@@ -186,7 +186,9 @@ export const resolveSolution = (
       };
 };
 
-export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
+export const loadEntities = async (
+  solutionIds?: string | string[],
+): Promise<Entity[]> => {
   let url =
     "EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName,DataProviderId&$filter=IsCustomizable/Value eq true";
 
@@ -206,8 +208,13 @@ export const loadEntities = async (solutionId?: string): Promise<Entity[]> => {
     }));
 
   // If a solution is selected, filter entities by solution components
-  if (solutionId) {
-    const solutionEntities = await getEntitiesInSolution(solutionId);
+  const selectedSolutionIds = solutionIds
+    ? Array.isArray(solutionIds)
+      ? solutionIds
+      : [solutionIds]
+    : [];
+  if (selectedSolutionIds.length) {
+    const solutionEntities = await getEntitiesInSolutions(selectedSolutionIds);
     entities = entities.filter((entity) =>
       solutionEntities.has(entity.logicalname.toLowerCase()),
     );
@@ -221,10 +228,18 @@ const normalizeGuid = (value: unknown): string =>
     ? value.replace(/[{}]/g, "").trim().toLowerCase()
     : "";
 
-const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> => {
-  const url = `solutioncomponents?$select=objectid&$filter=_solutionid_value eq ${solutionId} and componenttype eq 1`;
-
-  const components = await loadAllData(url);
+const getEntitiesInSolutions = async (solutionIds: string[]): Promise<Set<string>> => {
+  const componentResults = await Promise.all(
+    solutionIds.map(async (solutionId) => {
+      const url = `solutioncomponents?$select=objectid&$filter=_solutionid_value eq ${solutionId} and componenttype eq 1`;
+      const components = await loadAllData(url);
+      if (components.length === 0) {
+        logger.warning(`Solution ${solutionId} does not contain any entities.`);
+      }
+      return components;
+    }),
+  );
+  const components = componentResults.flat();
 
   // Get entity metadata IDs from solution components
   const entityMetadataIds = components
@@ -232,9 +247,7 @@ const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> =
     .filter(Boolean);
 
   if (entityMetadataIds.length === 0) {
-    throw new Error(
-      `Solution ${solutionId} does not contain any entity components.`,
-    );
+    return new Set();
   }
 
   const normalizedMetadataIds = new Set(entityMetadataIds);
@@ -247,12 +260,6 @@ const getEntitiesInSolution = async (solutionId: string): Promise<Set<string>> =
     .filter((def: any) => normalizedMetadataIds.has(normalizeGuid(def.MetadataId)))
     .map((def: any) => String(def.LogicalName || "").trim().toLowerCase())
     .filter(Boolean);
-
-  if (logicalNames.length === 0) {
-    throw new Error(
-      `Solution ${solutionId} contains entity components, but none could be resolved to entity metadata.`,
-    );
-  }
 
   return new Set(logicalNames);
 };
