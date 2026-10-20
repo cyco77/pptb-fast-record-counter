@@ -6,6 +6,12 @@ import {
   DataGridHeaderCell,
   DataGridRow,
   Dropdown,
+  Button,
+  Menu,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Option,
   Spinner,
   createTableColumn,
@@ -21,7 +27,8 @@ import type {
 } from "@fluentui/react-components";
 import { Entity } from "../types/entity";
 import { logger } from "../services/loggerService";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDownRegular, CheckmarkRegular } from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
   scrollWrapper: {
@@ -29,12 +36,13 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     overflow: "visible",
-    minWidth: "max-content",
+    width: "100%",
+    minWidth: 0,
   },
   gridContainer: {
     height: "auto",
-    width: "max-content",
-    minWidth: "max-content",
+    width: "100%",
+    minWidth: 0,
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
@@ -64,6 +72,7 @@ const useStyles = makeStyles({
   },
   viewDropdown: {
     width: "100%",
+    minWidth: 0,
     minHeight: "32px",
     padding: "0 8px",
     border: `1px solid ${tokens.colorNeutralStroke1}`,
@@ -72,6 +81,18 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
     fontFamily: "inherit",
     fontSize: "inherit",
+  },
+  viewMenuButton: {
+    width: "100%",
+    minWidth: 0,
+    justifyContent: "space-between",
+    overflow: "hidden",
+  },
+  viewMenuButtonLabel: {
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
 });
 
@@ -85,6 +106,26 @@ export interface IEntitiesDataGridProps {
 export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
   const styles = useStyles();
   const [openViewEntity, setOpenViewEntity] = useState<string | undefined>();
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [columnRatios, setColumnRatios] = useState({
+    displayname: 300 / 1200,
+    logicalname: 300 / 1200,
+    views: 450 / 1200,
+    recordCount: 150 / 1200,
+  });
+  const scrollWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = scrollWrapperRef.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   logger.info(
     `Rendering entity grid: ${props.items.length} rows (${props.items.filter((item) => !item.logicalname || !item.displayname).length} malformed)`,
   );
@@ -129,6 +170,50 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
           );
         };
 
+        if (useCompactViewMenu) {
+          const selectedViewName = selectedView?.name || allValue;
+          return (
+            <Menu>
+              <MenuTrigger disableButtonEnhancement>
+                <Button
+                  appearance="subtle"
+                  size="small"
+                  className={styles.viewMenuButton}
+                  icon={useIconOnlyViewMenu ? <ChevronDownRegular /> : undefined}
+                  aria-label={`Select view: ${selectedViewName}`}
+                  title={selectedViewName}
+                >
+                  {!useIconOnlyViewMenu && (
+                    <span className={styles.viewMenuButtonLabel}>
+                      {selectedViewName}
+                    </span>
+                  )}
+                  {!useIconOnlyViewMenu && <ChevronDownRegular />}
+                </Button>
+              </MenuTrigger>
+              <MenuPopover>
+                <MenuList>
+                  <MenuItem
+                    icon={!item.selectedViewId ? <CheckmarkRegular /> : undefined}
+                    onClick={() => props.onViewChange(item.logicalname, undefined)}
+                  >
+                    {allValue}
+                  </MenuItem>
+                  {item.views?.map((view) => (
+                    <MenuItem
+                      key={view.savedqueryid}
+                      icon={item.selectedViewId === view.savedqueryid ? <CheckmarkRegular /> : undefined}
+                      onClick={() => props.onViewChange(item.logicalname, view.savedqueryid)}
+                    >
+                      {view.name || view.savedqueryid}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </MenuPopover>
+            </Menu>
+          );
+        }
+
         return (
           <Dropdown
             value={selectedView?.name || allValue}
@@ -169,14 +254,55 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
     }),
   ];
 
-  const columnSizingOptions = {
-    displayname: { minWidth: 300, defaultWidth: 300 },
-    logicalname: { minWidth: 300, defaultWidth: 300 },
-    views: { minWidth: 450, defaultWidth: 450 },
+  const columnSizingOptions = Object.fromEntries(
+    Object.entries(columnRatios).map(([columnId, ratio]) => [
+      columnId,
+      {
+        minWidth: columnId === "recordCount" ? 80 : 48,
+        defaultWidth: Math.max(
+          columnId === "recordCount" ? 80 : 48,
+          containerWidth * ratio,
+        ),
+        idealWidth: Math.max(
+          columnId === "recordCount" ? 80 : 48,
+          containerWidth * ratio,
+        ),
+      },
+    ]),
+  );
+  const viewColumnWidth = containerWidth * columnRatios.views;
+  const useCompactViewMenu = viewColumnWidth < 180;
+  const useIconOnlyViewMenu = viewColumnWidth < 76;
+
+  const handleColumnResize: NonNullable<DataGridProps["onColumnResize"]> = (
+    _event,
+    { columnId, width },
+  ) => {
+    if (!containerWidth) return;
+
+    setColumnRatios((current) => {
+      const currentRatio = current[columnId as keyof typeof current];
+      if (currentRatio === undefined) return current;
+
+      const nextRatio = Math.min(0.95, Math.max(0.05, width / containerWidth));
+      const remainingRatio = 1 - currentRatio;
+      const nextRemainingRatio = 1 - nextRatio;
+
+      return Object.fromEntries(
+        Object.entries(current).map(([id, ratio]) => [
+          id,
+          id === columnId
+            ? nextRatio
+            : remainingRatio > 0
+              ? (ratio / remainingRatio) * nextRemainingRatio
+              : nextRemainingRatio / (Object.keys(current).length - 1),
+        ]),
+      ) as typeof current;
+    });
   };
 
   return (
-    <div className={styles.scrollWrapper}>
+    <div className={styles.scrollWrapper} ref={scrollWrapperRef}>
       <DataGrid
         items={props.items}
         columns={columns}
@@ -187,6 +313,8 @@ export const EntitiesDataGrid = (props: IEntitiesDataGridProps): JSXElement => {
         className={styles.gridContainer}
         resizableColumns
         columnSizingOptions={columnSizingOptions}
+        resizableColumnsOptions={{ autoFitColumns: false }}
+        onColumnResize={handleColumnResize}
       >
         <DataGridHeader className={styles.stickyHeader}>
           <DataGridRow>
